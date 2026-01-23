@@ -1,5 +1,5 @@
 {
-  description = "Segment shared mobile flake (Android/iOS tooling + SDKs)";
+  description = "Segment shared mobile flake (Android SDKs)";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
 
@@ -19,46 +19,32 @@
     in {
       packages = forAllSystems (system:
         let
-          pkgs = import nixpkgs { inherit system; config = { allowUnfree = true; android_sdk.accept_license = true; }; };
+          pkgs = import nixpkgs {
+            inherit system;
+            config = {
+              allowUnfree = true;
+              android_sdk.accept_license = true;
+            };
+          };
+
+          abiVersions =
+            if builtins.match "aarch64-.*" system != null
+            then [ "arm64-v8a" ]
+            else [ "x86_64" ];
+
+          mkAndroidSdk = api: pkgs.androidenv.composeAndroidPackages {
+            platformVersions = [ api ];
+            buildToolsVersions = [ "30.0.3" ];
+            cmdLineToolsVersion = "19.0";
+            includeEmulator = true;
+            includeSystemImages = true;
+            includeNDK = true;
+            abiVersions = abiVersions;
+            systemImageTypes = [ "google_apis" ];
+          };
         in {
-          android-tooling = pkgs.stdenv.mkDerivation {
-            pname = "android-tooling";
-            version = "1.0.0";
-            src = ./.;
-            installPhase = ''
-              mkdir -p $out/libexec/android-tooling $out/bin
-              install -m 0755 scripts/android.sh $out/libexec/android-tooling/android.sh
-              cat > $out/bin/android-tooling <<'SH'
-#!/usr/bin/env bash
-set -euo pipefail
-if [[ "$#" -eq 1 && "$1" == "--path" ]]; then
-  exec printf "%s\n" "$out/libexec/android-tooling/android.sh"
-fi
-exec "$out/libexec/android-tooling/android.sh" "$@"
-SH
-              chmod +x $out/bin/android-tooling
-            '';
-          };
-
-          ios-tooling = pkgs.stdenv.mkDerivation {
-            pname = "ios-tooling";
-            version = "1.0.0";
-            src = ./.;
-            installPhase = ''
-              mkdir -p $out/libexec/ios-tooling $out/bin
-              install -m 0755 scripts/ios.sh $out/libexec/ios-tooling/ios.sh
-              cat > $out/bin/ios-tooling <<'SH'
-#!/usr/bin/env bash
-set -euo pipefail
-if [[ "$#" -eq 1 && "$1" == "--path" ]]; then
-  exec printf "%s\n" "$out/libexec/ios-tooling/ios.sh"
-fi
-exec "$out/libexec/ios-tooling/ios.sh" "$@"
-SH
-              chmod +x $out/bin/ios-tooling
-            '';
-          };
+          min-android-sdk = (mkAndroidSdk "21").androidsdk;
+          max-android-sdk = (mkAndroidSdk "33").androidsdk;
         });
-
     };
 }

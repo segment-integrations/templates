@@ -1,32 +1,41 @@
 version = 1
+
 [install]
-android-tooling.flake = "github:segment-integrations/templates#android-tooling"
 gradle.pkg-path = "gradle"
 jdk17.pkg-path = "jdk17"
+
 [vars]
-ANDROID_AVD_MIN = "pixel_API21_x86_64"
-ANDROID_SYSTEM_IMAGE_MIN = "system-images;android-21;google_apis;x86_64"
-ANDROID_AVD_LATEST_X86 = "medium_phone_API33_x86_64"
-ANDROID_SYSTEM_IMAGE_LATEST_X86 = "system-images;android-33;google_apis;x86_64"
-ANDROID_AVD_LATEST_ARM = "medium_phone_API33_arm64_v8a"
-ANDROID_SYSTEM_IMAGE_LATEST_ARM = "system-images;android-33;google_apis;arm64-v8a"
+ANDROID_SYSTEM_IMAGE_TAG = "google_apis"
 ANDROID_EMULATOR_FLAGS = "-no-boot-anim -netdelay none -netspeed full -no-snapshot"
 ANDROID_EMULATOR_HEADLESS_FLAGS = "-no-window -no-audio -gpu swiftshader_indirect"
+
 [hook]
  on-activate = '''
- set -euo pipefail
-  project_root="${PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
-  export PROJECT_ROOT="$project_root"
-  export ANDROID_SDK_FLAVOR="${AVD_FLAVOR:-${ANDROID_TARGET:-max}}"
-  export ANDROID_FLAVOR_SOURCED=1
-  if command -v android-tooling >/dev/null 2>&1; then
-    # shellcheck disable=SC1091
-    source "$(android-tooling --path)"
-  fi
+  export PROJECT_ROOT="${PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
  '''
+
 [profile]
+bash = '''
+  android_reset() {
+    rm -rf "${ANDROID_AVD_HOME:-$HOME/.android/avd}" "$HOME/.android/adbkey" "$HOME/.android/adbkey.pub"
+    echo "Android AVDs and adb keys removed."
+  }
+  alias android-reset=android_reset
+'''
+
+zsh = '''
+  android_reset() {
+    rm -rf "${ANDROID_AVD_HOME:-$HOME/.android/avd}" "$HOME/.android/adbkey" "$HOME/.android/adbkey.pub"
+    echo "Android AVDs and adb keys removed."
+  }
+  alias android-reset=android_reset
+'''
+
 [services]
+
 [include]
 environments = []
+
 [build]
+
 [options]

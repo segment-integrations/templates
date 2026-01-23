@@ -1,46 +1,41 @@
 version = 1
 
-
 [install]
 cocoapods.pkg-path = "cocoapods"
 cocoapods.systems = ["x86_64-darwin", "aarch64-darwin"]
-ios-tooling.flake = "github:segment-integrations/templates#ios-tooling"
-
 
 [vars]
-IOS_SIM_MAX_DEVICE = "iPhone 17"
-
 
 [hook]
  on-activate = '''
-  set -euo pipefail
-
-  # Prefer system toolchains for iOS builds; avoid Nix C toolchain flags leaking into xcodebuild.
   unset NIX_CFLAGS_COMPILE NIX_LDFLAGS NIX_CFLAGS_LINK LIBRARY_PATH
-
-  project_root="${PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
-  if [ ! -d "$project_root/env/ios" ]; then
-    project_root="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../../../.." && pwd)"
-  fi
-  export PROJECT_ROOT="$project_root"
-  if command -v ios-tooling >/dev/null 2>&1; then
-    # shellcheck disable=SC1091
-    source "$(ios-tooling --path)"
-  fi
+  export PROJECT_ROOT="${PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
  '''
 
-
 [profile]
+bash = '''
+  ios_reset() {
+    xcrun simctl shutdown all >/dev/null 2>&1 || true
+    xcrun simctl erase all >/dev/null 2>&1 || true
+    echo "iOS simulators erased."
+  }
+  alias ios-reset=ios_reset
+'''
 
+zsh = '''
+  ios_reset() {
+    xcrun simctl shutdown all >/dev/null 2>&1 || true
+    xcrun simctl erase all >/dev/null 2>&1 || true
+    echo "iOS simulators erased."
+  }
+  alias ios-reset=ios_reset
+'''
 
 [services]
-
 
 [include]
 environments = []
 
-
 [build]
-
 
 [options]

@@ -1,45 +1,97 @@
 version = 1
+
 [install]
-android-sdk.flake = "github:segment-integrations/templates?dir=env/android/min"
-android-tooling.flake = "github:segment-integrations/templates#android-tooling"
+android-sdk.flake = "github:segment-integrations/templates#min-android-sdk"
+
 [vars]
+ANDROID_API = "21"
+ANDROID_DEVICE = "pixel"
+ANDROID_EMULATOR_SERVICE = "android-emulator-min"
+
 [hook]
- on-activate = '''
-  project_root="${PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
-  if command -v android-tooling >/dev/null 2>&1; then
-    # shellcheck disable=SC1091
-    . "$(android-tooling --path)"
-  elif [ -f "$project_root/scripts/android.sh" ]; then
-    # Legacy shim kept for developers.
-    # shellcheck disable=SC1091
-    . "$project_root/scripts/android.sh"
-  fi
- '''
+
 [profile]
+
 [services]
 android-emulator-min.command = """
 bash -lc '
 set -euo pipefail
 
-project_root="${PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
-cd "$project_root"
-
-arch="$(uname -m)"
-default_avd="pixel_API21_x86_64"
-if [ "$arch" = "arm64" ] || [ "$arch" = "aarch64" ]; then
-  default_avd="pixel_API21_arm64_v8a"
+if [ -z "${ANDROID_SDK_ROOT:-}" ] && [ -n "${ANDROID_HOME:-}" ]; then
+  export ANDROID_SDK_ROOT="$ANDROID_HOME"
+fi
+if [ -z "${ANDROID_SDK_ROOT:-}" ]; then
+  echo "ANDROID_SDK_ROOT not set. Ensure the Android SDK is provided by the env." >&2
+  exit 1
 fi
 
-DETOX_AVD="${DETOX_AVD:-${ANDROID_AVD_MIN:-$default_avd}}" \
-AVD_FLAVOR="minsdk" \
-AVD_SKIP_SECONDARY=1 \
-EMU_FOREGROUND=1 \
-android-tooling start
+require_tool() {
+  if ! command -v "$1" >/dev/null 2>&1; then
+    echo "Missing required tool: $1" >&2
+    exit 1
+  fi
+}
+
+require_tool avdmanager
+require_tool emulator
+require_tool adb
+
+api="${ANDROID_API:-21}"
+tag="${ANDROID_SYSTEM_IMAGE_TAG:-google_apis}"
+arch="$(uname -m)"
+abi="${ANDROID_ABI:-}"
+if [ -z "$abi" ]; then
+  if [ "$arch" = "arm64" ] || [ "$arch" = "aarch64" ]; then
+    abi="arm64-v8a"
+  else
+    abi="x86_64"
+  fi
+fi
+
+device="${ANDROID_DEVICE:-pixel}"
+avd_name="${DETOX_AVD:-${ANDROID_AVD_NAME:-${device}_API${api}_${abi//-/_}}}"
+system_image="${ANDROID_SYSTEM_IMAGE:-system-images;android-${api};${tag};${abi}}"
+
+android_setup() {
+  if avdmanager list avd | grep -q "Name: ${avd_name}"; then
+    return 0
+  fi
+  img_path="${ANDROID_SDK_ROOT}/${system_image/system-images;/system-images/}"
+  img_path="${img_path//;/\/}"
+  if [ ! -d "$img_path" ]; then
+    echo "Missing system image ${system_image} under ${ANDROID_SDK_ROOT}." >&2
+    exit 1
+  fi
+  echo "Creating AVD ${avd_name} (${system_image})"
+  yes "" | avdmanager create avd --force --name "$avd_name" --package "$system_image" --device "$device" --abi "$abi" --sdcard 512M
+}
+
+android_setup
+
+port="${EMU_PORT:-5554}"
+serial="emulator-${port}"
+headless="${EMU_HEADLESS:-}"
+
+emulator -avd "$avd_name" -port "$port" ${headless:+-no-window} ${ANDROID_EMULATOR_FLAGS:-} ${ANDROID_EMULATOR_HEADLESS_FLAGS:-} &
+
+adb -s "$serial" wait-for-device
+boot_completed=""
+until [ "$boot_completed" = "1" ]; do
+  boot_completed=$(adb -s "$serial" shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")
+  sleep 5
+done
+
+adb -s "$serial" shell settings put global window_animation_scale 0
+adb -s "$serial" shell settings put global transition_animation_scale 0
+adb -s "$serial" shell settings put global animator_duration_scale 0
 '
 """
+
 [include]
 environments = [
     { dir = "../common" }
 ]
+
 [build]
+
 [options]
