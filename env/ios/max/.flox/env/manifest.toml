@@ -1,0 +1,27 @@
+version = 1
+
+[install]
+ios-tooling.flake = "github:segment-integrations/templates#ios-tooling"
+[vars]
+IOS_SIM_DEVICE = "iPhone 17"
+IOS_MAX_RUNTIME = "26.1"
+[hook]
+[profile]
+[services]
+ios-simulator-max.command = """
+bash -lc '
+set -euo pipefail
+
+project_root="${PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+cd "$project_root"
+
+IOS_MANAGER_FOREGROUND=1 IOS_FLAVOR=max IOS_DOWNLOAD_RUNTIME=1 ios-tooling start
+'
+"""
+[include]
+environments = [
+    { dir = "../common" },
+    { dir = "../../nodejs" }
+]
+[build]
+[options]

@@ -1,0 +1,12 @@
+# Flox runtime data
+/.flox/cache/
+/.flox/log/
+/.flox/run/
+**/.flox/cache/
+**/.flox/log/
+**/.flox/run/
+**/.flox/.cache/
+
+# OS/editor
+.DS_Store
+.idea/
