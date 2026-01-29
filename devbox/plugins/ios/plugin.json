@@ -1,0 +1,43 @@
+{
+  "name": "ios",
+  "version": "0.0.1",
+  "description": "Configures iOS tooling inside Devbox and ensures Xcode toolchain usage.",
+  "env": {
+    "IOS_CONFIG_DIR": "{{ .DevboxDir }}",
+    "IOS_DEVICES_DIR": "{{ .DevboxDir }}/devices",
+    "IOS_SCRIPTS_DIR": "{{ .Virtenv }}/scripts"
+  },
+  "packages": {
+    "bash": "latest",
+    "coreutils": "latest",
+    "gnused": "latest",
+    "gnugrep": "latest",
+    "gawk": "latest",
+    "jq": "latest",
+    "cocoapods": {
+      "version": "latest",
+      "platforms": ["x86_64-darwin", "aarch64-darwin"]
+    }
+  },
+  "create_files": {
+    "{{ .Virtenv }}/process-compose.yaml": "config/process-compose.yaml",
+    "{{ .Virtenv }}/scripts/env.sh": "scripts/env.sh",
+    "{{ .Virtenv }}/scripts/simctl.sh": "scripts/simctl.sh",
+    "{{ .DevboxDir }}/devices/min.json": "config/devices/min.json",
+    "{{ .DevboxDir }}/devices/max.json": "config/devices/max.json",
+    "{{ .DevboxDir }}/ios.json": "config/ios.json"
+  },
+  "shell": {
+    "scripts": {
+      "start-sim": [
+        "device_name=\"${1-}\"",
+        "if [ -n \"${SIM_HEADLESS:-}\" ]; then",
+        "  devbox services up -b --env SIM_HEADLESS=\"$SIM_HEADLESS\" --env IOS_DEVICE_NAME=\"$device_name\" ios-simulator",
+        "else",
+        "  devbox services up -b --env IOS_DEVICE_NAME=\"$device_name\" ios-simulator",
+        "fi"
+      ],
+      "stop-sim": "devbox services stop ios-simulator"
+    }
+  }
+}

@@ -7,6 +7,16 @@
 **/.flox/run/
 **/.flox/.cache/
 
+# Devbox runtime data
+/.devbox/
+**/.devbox/
+
 # OS/editor
 .DS_Store
 .idea/
+
+# Build artifacts
+**/.gradle/
+**/build/
+**/node_modules/
+**/Pods/

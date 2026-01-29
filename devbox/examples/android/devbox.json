@@ -1,0 +1,11 @@
+{
+  "include": ["path:../../plugins/android/plugin.json"],
+  "env": {
+    "ANDROID_APP_ID": "com.example.devbox"
+  },
+  "shell": {
+    "scripts": {
+      "build": "gradle assembleDebug"
+    }
+  }
+}

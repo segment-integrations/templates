@@ -1,0 +1,61 @@
+{
+  "name": "android",
+  "version": "0.0.1",
+  "description": "Sets Android home/AVD paths inside the Devbox virtenv for reproducible, project-local Android tooling.",
+  "env": {
+    "ANDROID_USER_HOME": "{{ .Virtenv }}/android",
+    "ANDROID_AVD_HOME": "{{ .Virtenv }}/android/avd",
+    "ANDROID_EMULATOR_HOME": "{{ .Virtenv }}/android",
+    "ANDROID_CONFIG_DIR": "{{ .DevboxDir }}",
+    "ANDROID_DEVICES_DIR": "{{ .DevboxDir }}/devices",
+    "ANDROID_SCRIPTS_DIR": "{{ .Virtenv }}/scripts"
+  },
+  "packages": {
+    "bash": "latest",
+    "coreutils": "latest",
+    "gnused": "latest",
+    "gnugrep": "latest",
+    "gawk": "latest",
+    "jq": "latest",
+    "jdk17": "latest",
+    "gradle": "latest",
+    "path:{{ .DevboxDir }}#android-sdk": ""
+  },
+  "create_files": {
+    "{{ .Virtenv }}/android": "",
+    "{{ .Virtenv }}/android/avd": "",
+    "{{ .Virtenv }}/process-compose.yaml": "config/process-compose.yaml",
+    "{{ .Virtenv }}/scripts/env.sh": "scripts/env.sh",
+    "{{ .Virtenv }}/scripts/lib.sh": "scripts/lib.sh",
+    "{{ .Virtenv }}/scripts/avd.sh": "scripts/avd.sh",
+    "{{ .Virtenv }}/scripts/android.sh": "scripts/android.sh",
+    "{{ .Virtenv }}/scripts/devices.sh": "scripts/devices.sh",
+    "{{ .Virtenv }}/scripts/select-device.sh": "scripts/select-device.sh",
+    "{{ .DevboxDir }}/config/android.json": "config/android.json",
+    "{{ .DevboxDir }}/devices/min.json": "config/devices/min.json",
+    "{{ .DevboxDir }}/devices/max.json": "config/devices/max.json",
+    "{{ .DevboxDir }}/android.json": "config/android.json",
+    "{{ .DevboxDir }}/flake.nix": "config/flake.nix",
+    "{{ .DevboxDir }}/flake.lock": "config/flake.lock"
+  },
+  "shell": {
+    "init_hook": [
+      ". {{ .Virtenv }}/scripts/env.sh"
+    ],
+    "scripts": {
+      "start-emu": [
+        "device_name=\"${1-}\"",
+        "if [ -n \"${EMU_HEADLESS:-}\" ]; then",
+        "  devbox services up -b --env EMU_HEADLESS=\"$EMU_HEADLESS\" --env ANDROID_DEVICE_NAME=\"$device_name\" android-emulator",
+        "else",
+        "  devbox services up -b --env ANDROID_DEVICE_NAME=\"$device_name\" android-emulator",
+        "fi"
+      ],
+      "start-app": [
+        ". {{ .Virtenv }}/scripts/avd.sh",
+        "android_run_app \"${1-}\""
+      ],
+      "stop-emu": "devbox services stop android-emulator"
+    }
+  }
+}

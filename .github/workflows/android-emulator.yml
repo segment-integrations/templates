@@ -1,0 +1,21 @@
+name: Android Emulator Service
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  android-emulator:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install devbox
+        uses: jetify-com/devbox-install-action@v0.12.0
+      - name: Start Android emulator service
+        working-directory: devbox/examples/android
+        run: EMU_HEADLESS=1 devbox run --pure start-emu
+      - name: Wait for emulator to settle
+        run: sleep 30
+      - name: Stop Android emulator service
+        working-directory: devbox/examples/android
+        run: devbox run --pure stop-emu

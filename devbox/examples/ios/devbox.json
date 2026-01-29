@@ -1,0 +1,8 @@
+{
+  "include": ["path:../../plugins/ios/plugin.json"],
+  "shell": {
+    "scripts": {
+      "build": "swift build"
+    }
+  }
+}

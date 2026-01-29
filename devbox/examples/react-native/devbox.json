@@ -1,0 +1,9 @@
+{
+  "include": ["path:../../plugins/react-native/plugin.json"],
+  "packages": ["nodejs@20", "watchman@latest"],
+  "shell": {
+    "scripts": {
+      "build": "cd android && gradle assembleDebug"
+    }
+  }
+}

@@ -1,0 +1,472 @@
+#!/usr/bin/env sh
+set -eu
+
+if ! (return 0 2>/dev/null); then
+  echo "templates/devbox/plugins/ios/scripts/simctl.sh must be sourced." >&2
+  exit 1
+fi
+
+script_dir="$(cd "$(dirname "$0")" && pwd)"
+if [ -n "${IOS_SCRIPTS_DIR:-}" ] && [ -d "${IOS_SCRIPTS_DIR}" ]; then
+  script_dir="${IOS_SCRIPTS_DIR}"
+fi
+
+# shellcheck disable=SC1090
+. "$script_dir/env.sh"
+
+ios_debug_log_script "templates/devbox/plugins/ios/scripts/simctl.sh"
+
+ensure_core_sim_service() {
+  status=0
+  output="$(xcrun simctl list devices -j 2>&1)" || status=$?
+  if [ "$status" -ne 0 ]; then
+    echo "simctl failed while listing devices (status ${status}). CoreSimulatorService may be unhealthy." >&2
+    echo "Try restarting it:" >&2
+    echo "  killall -9 com.apple.CoreSimulatorService 2>/dev/null || true" >&2
+    echo "  launchctl kickstart -k gui/$UID/com.apple.CoreSimulatorService" >&2
+    echo "Then open Simulator once and rerun devbox run setup-ios." >&2
+    echo "simctl error output:" >&2
+    echo "$output" >&2
+    return 1
+  fi
+
+  if echo "$output" | grep -q "CoreSimulatorService connection became invalid"; then
+    echo "CoreSimulatorService is not healthy. Try restarting it:" >&2
+    echo "  killall -9 com.apple.CoreSimulatorService 2>/dev/null || true" >&2
+    echo "  launchctl kickstart -k gui/$UID/com.apple.CoreSimulatorService" >&2
+    echo "Then open Simulator once and rerun devbox run setup-ios." >&2
+    echo "simctl error output:" >&2
+    echo "$output" >&2
+    return 1
+  fi
+}
+
+pick_runtime() {
+  preferred="$1"
+  json="$(xcrun simctl list runtimes -j)"
+  choice="$(echo "$json" | jq -r --arg v "$preferred" '.runtimes[] | select(.isAvailable and (.name|startswith("iOS \($v)"))) | "\(.identifier)|\(.name)"' | head -n1)"
+  if [ -z "$choice" ] || [ "$choice" = "null" ]; then
+    choice="$(echo "$json" | jq -r '.runtimes[] | select(.isAvailable and (.name|startswith("iOS "))) | "\(.version)|\(.identifier)|\(.name)"' | sort -Vr | head -n1 | cut -d"|" -f2-)"
+  fi
+  if [ -n "$choice" ] && [ "$choice" != "null" ]; then
+    printf '%s\n' "$choice"
+    return 0
+  fi
+  return 1
+}
+
+resolve_runtime() {
+  preferred="$1"
+  if choice="$(pick_runtime "$preferred")"; then
+    printf '%s\n' "$choice"
+    return 0
+  fi
+
+  if [ "${IOS_DOWNLOAD_RUNTIME:-1}" != "0" ] && command -v xcodebuild >/dev/null 2>&1; then
+    echo "Preferred runtime iOS ${preferred} not found. Attempting to download via xcodebuild -downloadPlatform iOS..." >&2
+    if xcodebuild -downloadPlatform iOS; then
+      if choice="$(pick_runtime "$preferred")"; then
+        printf '%s\n' "$choice"
+        return 0
+      fi
+    else
+      echo "xcodebuild -downloadPlatform iOS failed; continuing with available runtimes." >&2
+    fi
+  fi
+
+  pick_runtime "$preferred"
+}
+
+resolve_runtime_strict() {
+  preferred="$1"
+  if choice="$(pick_runtime "$preferred")"; then
+    printf '%s\n' "$choice"
+    return 0
+  fi
+
+  if [ "${IOS_DOWNLOAD_RUNTIME:-1}" != "0" ] && command -v xcodebuild >/dev/null 2>&1; then
+    echo "Preferred runtime iOS ${preferred} not found. Attempting to download via xcodebuild -downloadPlatform iOS..." >&2
+    if xcodebuild -downloadPlatform iOS; then
+      if choice="$(pick_runtime "$preferred")"; then
+        printf '%s\n' "$choice"
+        return 0
+      fi
+    else
+      echo "xcodebuild -downloadPlatform iOS failed." >&2
+    fi
+  fi
+
+  echo "Preferred runtime iOS ${preferred} not found." >&2
+  return 1
+}
+
+resolve_runtime_name() {
+  preferred="$1"
+  choice="$(resolve_runtime "$preferred" || true)"
+  if [ -n "$choice" ]; then
+    printf '%s\n' "$choice" | cut -d'|' -f2
+    return 0
+  fi
+  return 1
+}
+
+resolve_runtime_name_strict() {
+  preferred="$1"
+  choice="$(resolve_runtime_strict "$preferred" || true)"
+  if [ -n "$choice" ]; then
+    printf '%s\n' "$choice" | cut -d'|' -f2
+    return 0
+  fi
+  return 1
+}
+
+ios_devices_dir() {
+  if [ -n "${IOS_DEVICES_DIR:-}" ] && [ -d "$IOS_DEVICES_DIR" ]; then
+    printf '%s\n' "$IOS_DEVICES_DIR"
+    return 0
+  fi
+  if [ -n "${IOS_CONFIG_DIR:-}" ] && [ -d "${IOS_CONFIG_DIR}/devices" ]; then
+    printf '%s\n' "${IOS_CONFIG_DIR}/devices"
+    return 0
+  fi
+  if [ -n "${DEVBOX_PROJECT_ROOT:-}" ] && [ -d "${DEVBOX_PROJECT_ROOT}/devbox.d/ios/devices" ]; then
+    printf '%s\n' "${DEVBOX_PROJECT_ROOT}/devbox.d/ios/devices"
+    return 0
+  fi
+  if [ -n "${DEVBOX_PROJECT_DIR:-}" ] && [ -d "${DEVBOX_PROJECT_DIR}/devbox.d/ios/devices" ]; then
+    printf '%s\n' "${DEVBOX_PROJECT_DIR}/devbox.d/ios/devices"
+    return 0
+  fi
+  if [ -n "${DEVBOX_WD:-}" ] && [ -d "${DEVBOX_WD}/devbox.d/ios/devices" ]; then
+    printf '%s\n' "${DEVBOX_WD}/devbox.d/ios/devices"
+    return 0
+  fi
+  if [ -d "./devbox.d/ios/devices" ]; then
+    printf '%s\n' "./devbox.d/ios/devices"
+    return 0
+  fi
+  return 1
+}
+
+ios_device_files() {
+  dir="$1"
+  if [ -z "$dir" ]; then
+    return 1
+  fi
+  find "$dir" -type f -name '*.json' | sort
+}
+
+ios_device_runtime_for_name() {
+  name="$1"
+  dir="$(ios_devices_dir 2>/dev/null || true)"
+  if [ -z "$dir" ]; then
+    return 1
+  fi
+  for file in $(ios_device_files "$dir"); do
+    file_name="$(jq -r '.name // empty' "$file")"
+    if [ -n "$file_name" ] && [ "$file_name" = "$name" ]; then
+      runtime="$(jq -r '.runtime // empty' "$file")"
+      if [ -n "$runtime" ]; then
+        printf '%s\n' "$runtime"
+        return 0
+      fi
+    fi
+  done
+  return 1
+}
+
+ios_select_device_name() {
+  selection="$1"
+  dir="$2"
+  if [ -z "$dir" ]; then
+    return 1
+  fi
+  if [ -n "$selection" ]; then
+    for file in $(ios_device_files "$dir"); do
+      base="$(basename "$file")"
+      base="${base%.json}"
+      name="$(jq -r '.name // empty' "$file")"
+      if [ "$selection" = "$base" ] || [ "$selection" = "$name" ]; then
+        printf '%s\n' "$name"
+        return 0
+      fi
+    done
+    echo "Warning: iOS device '${selection}' not found in ${dir}; using first definition." >&2
+  fi
+  first_file="$(ios_device_files "$dir" | head -n1)"
+  if [ -n "$first_file" ]; then
+    first_name="$(jq -r '.name // empty' "$first_file")"
+    if [ -n "$first_name" ]; then
+      printf '%s\n' "$first_name"
+      return 0
+    fi
+  fi
+  return 1
+}
+
+existing_device_udid_any_runtime() {
+  name="$1"
+  xcrun simctl list devices -j | jq -r --arg name "$name" '.devices[]?[]? | select(.name == $name) | .udid' | head -n1
+}
+
+device_data_dir_exists() {
+  udid="${1:-}"
+  if [ -z "$udid" ]; then
+    return 1
+  fi
+  dir="$HOME/Library/Developer/CoreSimulator/Devices/$udid"
+  [ -d "$dir" ]
+}
+
+devicetype_id_for_name() {
+  name="$1"
+  xcrun simctl list devicetypes -j | jq -r --arg name "$name" '.devicetypes[] | select((.name|ascii_downcase) == ($name|ascii_downcase)) | .identifier' | head -n1
+}
+
+ensure_device() {
+  base_name="$1"
+  preferred_runtime="$2"
+
+  existing_udid="$(existing_device_udid_any_runtime "$base_name")"
+  if [ -n "$existing_udid" ]; then
+    if device_data_dir_exists "$existing_udid"; then
+      echo "Found existing ${base_name}: ${existing_udid}"
+      return 0
+    fi
+    echo "Existing ${base_name} (${existing_udid}) is missing its data directory. Deleting stale simulator..."
+    xcrun simctl delete "$existing_udid" || true
+  fi
+
+  choice="$(resolve_runtime "$preferred_runtime" || true)"
+  if [ -z "$choice" ]; then
+    echo "No available iOS simulator runtime found. Install one in Xcode (Settings > Platforms) and retry." >&2
+    return 1
+  fi
+  runtime_id="$(printf '%s' "$choice" | cut -d'|' -f1)"
+  runtime_name="$(printf '%s' "$choice" | cut -d'|' -f2)"
+
+  display_name="${base_name} (${runtime_name})"
+
+  device_type="$(devicetype_id_for_name "$base_name" || true)"
+  if [ -z "$device_type" ]; then
+    echo "Device type '${base_name}' is unavailable in this Xcode install. Skipping ${display_name}." >&2
+    return 0
+  fi
+
+  existing_udid="$(existing_device_udid_any_runtime "$display_name")"
+  if [ -n "$existing_udid" ]; then
+    if device_data_dir_exists "$existing_udid"; then
+      echo "Found existing ${display_name}: ${existing_udid}"
+      return 0
+    fi
+    echo "Existing ${display_name} (${existing_udid}) is missing its data directory. Deleting stale simulator..."
+    xcrun simctl delete "$existing_udid" || true
+  fi
+
+  echo "Creating ${display_name}..."
+  xcrun simctl create "$display_name" "$device_type" "$runtime_id"
+  echo "Created ${display_name}"
+}
+
+ensure_developer_dir() {
+  desired="${IOS_DEVELOPER_DIR:-}"
+  PATH="/usr/bin:/bin:/usr/sbin:/sbin:${PATH}"
+  export PATH
+  if [ -z "$desired" ]; then
+    if xcode-select -p >/dev/null 2>&1; then
+      desired="$(xcode-select -p)"
+    elif [ -d /Applications/Xcode.app/Contents/Developer ]; then
+      desired="/Applications/Xcode.app/Contents/Developer"
+    fi
+  fi
+
+  ios_require_dir "$desired" "Xcode developer directory not found. Install Xcode/CLI tools or set IOS_DEVELOPER_DIR to an Xcode path (e.g., /Applications/Xcode.app/Contents/Developer)."
+  ios_require_dir_contains "$desired" "Toolchains/XcodeDefault.xctoolchain" "Xcode toolchain missing under ${desired}."
+  ios_require_dir_contains "$desired" "Platforms/iPhoneSimulator.platform" "iPhoneSimulator platform missing under ${desired}."
+
+  DEVELOPER_DIR="$desired"
+  PATH="$DEVELOPER_DIR/usr/bin:$PATH"
+  export DEVELOPER_DIR PATH
+  return 0
+}
+
+ensure_simctl() {
+  if xcrun -f simctl >/dev/null 2>&1; then
+    return 0
+  fi
+  cat >&2 <<'EOM'
+Missing simctl.
+- The standalone Command Line Tools do NOT include simctl; you need full Xcode.
+- Install/locate Xcode.app, then select it:
+    sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+- You can also set IOS_DEVELOPER_DIR to your Xcode path for this script.
+EOM
+  exit 1
+}
+
+ios_setup() {
+  if [ -n "${IOS_XCODE_ENV_PATH:-}" ]; then
+    node_binary="${IOS_NODE_BINARY:-${NODE_BINARY:-}}"
+    if [ -z "$node_binary" ]; then
+      echo "IOS_XCODE_ENV_PATH is set but IOS_NODE_BINARY/NODE_BINARY is empty." >&2
+      return 1
+    fi
+    env_dir="$(dirname "$IOS_XCODE_ENV_PATH")"
+    if [ ! -d "$env_dir" ]; then
+      echo "IOS_XCODE_ENV_PATH directory does not exist: ${env_dir}" >&2
+      return 1
+    fi
+    printf 'export NODE_BINARY=%s\n' "$node_binary" >"$IOS_XCODE_ENV_PATH"
+  fi
+  ensure_developer_dir
+  ios_require_tool xcrun "Missing required tool: xcrun. Install Xcode CLI tools before running (xcode-select --install or Xcode.app + xcode-select -s)."
+  ios_require_tool jq
+  ensure_simctl
+
+  if ! ensure_core_sim_service; then
+    return 1
+  fi
+
+  devices_dir="$(ios_devices_dir 2>/dev/null || true)"
+  if [ -z "$devices_dir" ]; then
+    echo "iOS devices directory not found. Expected devbox.d/ios/devices or IOS_DEVICES_DIR." >&2
+    return 1
+  fi
+
+  device_files="$(ios_device_files "$devices_dir")"
+  if [ -z "$device_files" ]; then
+    echo "No iOS device definitions found in ${devices_dir}." >&2
+    return 1
+  fi
+
+  for device_file in $device_files; do
+    device_name="$(jq -r '.name // empty' "$device_file")"
+    runtime="$(jq -r '.runtime // empty' "$device_file")"
+    if [ -z "$device_name" ]; then
+      echo "iOS device definition missing name in ${device_file}." >&2
+      return 1
+    fi
+    if [ -z "$runtime" ]; then
+      runtime="${IOS_RUNTIME:-${IOS_RUNTIME_MAX:-${IOS_RUNTIME_MIN:-}}}"
+    fi
+    if [ -z "$runtime" ]; then
+      echo "IOS_RUNTIME (or IOS_RUNTIME_MAX/MIN) must be set to create simulators." >&2
+      return 1
+    fi
+    ensure_device "$device_name" "$runtime"
+  done
+
+  echo "Done. Launch via Xcode > Devices or 'xcrun simctl boot \"<name>\"' then 'open -a Simulator'."
+}
+
+resolve_service_device_name() {
+  if [ -n "${IOS_SIM_DEVICE:-}" ]; then
+    printf '%s\n' "$IOS_SIM_DEVICE"
+    return 0
+  fi
+  if [ -n "${IOS_DEVICE_NAME:-}" ]; then
+    printf '%s\n' "$IOS_DEVICE_NAME"
+    return 0
+  fi
+  devices_dir="$(ios_devices_dir 2>/dev/null || true)"
+  if [ -n "$devices_dir" ]; then
+    selection="${IOS_DEFAULT_DEVICE:-}"
+    ios_select_device_name "$selection" "$devices_dir" && return 0
+  fi
+  return 1
+}
+
+ios_start() {
+  if [ -n "${1:-}" ]; then
+    IOS_DEVICE_NAME="$1"
+    export IOS_DEVICE_NAME
+  fi
+  headless="${SIM_HEADLESS:-}"
+
+  ensure_developer_dir
+  ios_require_tool jq
+  ensure_simctl
+  if ! ensure_core_sim_service; then
+    return 1
+  fi
+
+  preferred_runtime="$(ios_device_runtime_for_name "$device_base" || true)"
+  if [ -z "$preferred_runtime" ]; then
+    preferred_runtime="${IOS_RUNTIME:-${IOS_RUNTIME_MAX:-${IOS_RUNTIME_MIN:-}}}"
+  fi
+  choice="$(resolve_runtime "$preferred_runtime" || true)"
+  if [ -z "$choice" ]; then
+    echo "No available iOS simulator runtime found. Install one in Xcode (Settings > Platforms) and retry." >&2
+    return 1
+  fi
+  runtime_name="$(printf '%s' "$choice" | cut -d'|' -f2)"
+
+  device_base="$(resolve_service_device_name || true)"
+  if [ -z "$device_base" ]; then
+    echo "No iOS simulator device configured; set IOS_SIM_DEVICE or IOS_DEVICE_NAMES." >&2
+    return 1
+  fi
+
+  ensure_device "$device_base" "$preferred_runtime"
+  display_name="${device_base} (${runtime_name})"
+  udid="$(xcrun simctl list devices -j | jq -r --arg name "$display_name" '.devices[]?[]? | select(.name == $name) | .udid' | head -n1)"
+  if [ -z "$udid" ]; then
+    udid="$(existing_device_udid_any_runtime "$device_base" || true)"
+  fi
+  if [ -z "$udid" ]; then
+    echo "Unable to resolve iOS simulator device for ${display_name}." >&2
+    return 1
+  fi
+
+  IOS_SIM_UDID="$udid"
+  IOS_SIM_NAME="$display_name"
+  export IOS_SIM_UDID IOS_SIM_NAME
+
+  xcrun simctl boot "$udid" >/dev/null 2>&1 || true
+  if ! xcrun simctl bootstatus "$udid" -b >/dev/null 2>&1; then
+    while true; do
+      state="$(xcrun simctl list devices -j | jq -r --arg udid "$udid" '.devices[]?[]? | select(.udid == $udid) | .state' | head -n1)"
+      [ "$state" = "Booted" ] && break
+      sleep 5
+    done
+  fi
+
+  if [ -z "$headless" ]; then
+    open -a Simulator --args -CurrentDeviceUDID "$udid" >/dev/null 2>&1 || true
+  fi
+  echo "iOS simulator booted: ${display_name} (${udid}, headless=${headless:-0})"
+}
+
+ios_stop() {
+  udid="${IOS_SIM_UDID:-}"
+  if [ -z "$udid" ] && [ -n "${IOS_SIM_NAME:-}" ]; then
+    udid="$(xcrun simctl list devices -j | jq -r --arg name "$IOS_SIM_NAME" '.devices[]?[]? | select(.name == $name) | .udid' | head -n1)"
+  fi
+  if [ -n "$udid" ]; then
+    echo "Stopping iOS simulator: ${udid}"
+    xcrun simctl shutdown "$udid" >/dev/null 2>&1 || true
+  else
+    echo "Stopping booted iOS simulators (if any)."
+    xcrun simctl shutdown booted >/dev/null 2>&1 || true
+  fi
+}
+
+ios_service() {
+  ios_start "$1"
+
+  trap 'ios_stop; exit 0' INT TERM
+
+  udid="${IOS_SIM_UDID:-}"
+  if [ -z "$udid" ]; then
+    while true; do
+      sleep 5
+    done
+  fi
+
+  while true; do
+    state="$(xcrun simctl list devices -j | jq -r --arg udid "$udid" '.devices[]?[]? | select(.udid == $udid) | .state' | head -n1)"
+    [ -z "$state" ] && break
+    [ "$state" = "Shutdown" ] && break
+    sleep 5
+  done
+}
