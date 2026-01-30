@@ -1,6 +1,5 @@
 {
   "packages": {
-    "process-compose": "latest",
-    "xcodegen": "latest"
+    "process-compose": "latest"
   }
 }

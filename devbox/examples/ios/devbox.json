@@ -2,7 +2,7 @@
   "include": ["path:../../plugins/ios/plugin.json"],
   "shell": {
     "scripts": {
-      "build": "xcodebuild -project DevboxIOS.xcodeproj -scheme DevboxIOS -configuration Debug -destination 'generic/platform=iOS Simulator' -derivedDataPath .devbox/virtenv/ios/DerivedData build"
+      "build": "xcodebuild -project ios.xcodeproj -scheme ios -configuration Debug -destination 'generic/platform=iOS Simulator' -derivedDataPath .devbox/virtenv/ios/DerivedData build"
     }
   },
   "packages": {

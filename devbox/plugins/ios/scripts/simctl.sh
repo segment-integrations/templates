@@ -536,10 +536,6 @@ ios_resolve_derived_data() {
     printf '%s\n' "$IOS_APP_DERIVED_DATA"
     return 0
   fi
-  if [ -n "${IOS_CONFIG_DIR:-}" ]; then
-    printf '%s\n' "${IOS_CONFIG_DIR%/}/.devbox/virtenv/ios/DerivedData"
-    return 0
-  fi
   if [ -n "${DEVBOX_PROJECT_ROOT:-}" ]; then
     printf '%s\n' "${DEVBOX_PROJECT_ROOT%/}/.devbox/virtenv/ios/DerivedData"
     return 0
@@ -565,7 +561,8 @@ ios_build_app() {
   fi
   derived_data="$(ios_resolve_derived_data)"
   mkdir -p "$derived_data"
-  xcodebuild -project "$project" -scheme "$scheme" -configuration Debug \
+  env -u LD -u LDFLAGS -u NIX_LDFLAGS -u NIX_CFLAGS_COMPILE -u NIX_CFLAGS_LINK \
+    xcodebuild -project "$project" -scheme "$scheme" -configuration Debug \
     -destination 'generic/platform=iOS Simulator' \
     -derivedDataPath "$derived_data" build
 }
