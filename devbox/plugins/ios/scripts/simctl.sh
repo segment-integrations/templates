@@ -16,6 +16,30 @@ fi
 
 ios_debug_log_script "templates/devbox/plugins/ios/scripts/simctl.sh"
 
+ios_config_path() {
+  if [ -n "${IOS_CONFIG_DIR:-}" ] && [ -f "${IOS_CONFIG_DIR%/}/ios.json" ]; then
+    printf '%s\n' "${IOS_CONFIG_DIR%/}/ios.json"
+    return 0
+  fi
+  if [ -n "${DEVBOX_PROJECT_ROOT:-}" ] && [ -f "${DEVBOX_PROJECT_ROOT}/devbox.d/ios/ios.json" ]; then
+    printf '%s\n' "${DEVBOX_PROJECT_ROOT}/devbox.d/ios/ios.json"
+    return 0
+  fi
+  if [ -n "${DEVBOX_PROJECT_DIR:-}" ] && [ -f "${DEVBOX_PROJECT_DIR}/devbox.d/ios/ios.json" ]; then
+    printf '%s\n' "${DEVBOX_PROJECT_DIR}/devbox.d/ios/ios.json"
+    return 0
+  fi
+  if [ -n "${DEVBOX_WD:-}" ] && [ -f "${DEVBOX_WD}/devbox.d/ios/ios.json" ]; then
+    printf '%s\n' "${DEVBOX_WD}/devbox.d/ios/ios.json"
+    return 0
+  fi
+  if [ -f "./devbox.d/ios/ios.json" ]; then
+    printf '%s\n' "./devbox.d/ios/ios.json"
+    return 0
+  fi
+  return 1
+}
+
 ensure_core_sim_service() {
   status=0
   output="$(xcrun simctl list devices -j 2>&1)" || status=$?
@@ -156,6 +180,39 @@ ios_device_files() {
   find "$dir" -type f -name '*.json' | sort
 }
 
+ios_selected_device_files() {
+  devices_dir="$1"
+  config_path="$(ios_config_path 2>/dev/null || true)"
+  if [ -z "$config_path" ] || [ ! -f "$config_path" ]; then
+    ios_device_files "$devices_dir"
+    return 0
+  fi
+  selections="$(jq -r '.EVALUATE_DEVICES // [] | if length == 0 then empty else .[] end' "$config_path")"
+  if [ -z "$selections" ]; then
+    ios_device_files "$devices_dir"
+    return 0
+  fi
+
+  matched=""
+  for file in $(ios_device_files "$devices_dir"); do
+    base="$(basename "$file")"
+    base="${base%.json}"
+    name="$(jq -r '.name // empty' "$file")"
+    for selection in $selections; do
+      if [ "$selection" = "$base" ] || [ "$selection" = "$name" ]; then
+        matched="${matched}${file}
+"
+        break
+      fi
+    done
+  done
+  if [ -z "$matched" ]; then
+    echo "No iOS device definitions matched EVALUATE_DEVICES in ${config_path}." >&2
+    return 1
+  fi
+  printf '%s' "$matched"
+}
+
 ios_device_runtime_for_name() {
   name="$1"
   dir="$(ios_devices_dir 2>/dev/null || true)"
@@ -273,11 +330,7 @@ ensure_developer_dir() {
   PATH="/usr/bin:/bin:/usr/sbin:/sbin:${PATH}"
   export PATH
   if [ -z "$desired" ]; then
-    if xcode-select -p >/dev/null 2>&1; then
-      desired="$(xcode-select -p)"
-    elif [ -d /Applications/Xcode.app/Contents/Developer ]; then
-      desired="/Applications/Xcode.app/Contents/Developer"
-    fi
+    desired="$(ios_resolve_developer_dir 2>/dev/null || true)"
   fi
 
   ios_require_dir "$desired" "Xcode developer directory not found. Install Xcode/CLI tools or set IOS_DEVELOPER_DIR to an Xcode path (e.g., /Applications/Xcode.app/Contents/Developer)."
@@ -339,6 +392,7 @@ ios_setup() {
     return 1
   fi
 
+  device_files="$(ios_selected_device_files "$devices_dir")" || return 1
   for device_file in $device_files; do
     device_name="$(jq -r '.name // empty' "$device_file")"
     runtime="$(jq -r '.runtime // empty' "$device_file")"
@@ -347,10 +401,13 @@ ios_setup() {
       return 1
     fi
     if [ -z "$runtime" ]; then
-      runtime="${IOS_RUNTIME:-${IOS_RUNTIME_MAX:-${IOS_RUNTIME_MIN:-}}}"
+      runtime="${IOS_DEFAULT_RUNTIME:-}"
+      if [ -z "$runtime" ] && command -v xcrun >/dev/null 2>&1; then
+        runtime="$(xcrun --sdk iphonesimulator --show-sdk-version 2>/dev/null || true)"
+      fi
     fi
     if [ -z "$runtime" ]; then
-      echo "IOS_RUNTIME (or IOS_RUNTIME_MAX/MIN) must be set to create simulators." >&2
+      echo "IOS_DEFAULT_RUNTIME must be set (or install a simulator runtime in Xcode)." >&2
       return 1
     fi
     ensure_device "$device_name" "$runtime"
@@ -390,9 +447,18 @@ ios_start() {
     return 1
   fi
 
+  device_base="$(resolve_service_device_name || true)"
+  if [ -z "$device_base" ]; then
+    echo "No iOS simulator device configured; set IOS_DEVICE_NAME or IOS_DEFAULT_DEVICE." >&2
+    return 1
+  fi
+
   preferred_runtime="$(ios_device_runtime_for_name "$device_base" || true)"
   if [ -z "$preferred_runtime" ]; then
-    preferred_runtime="${IOS_RUNTIME:-${IOS_RUNTIME_MAX:-${IOS_RUNTIME_MIN:-}}}"
+    preferred_runtime="${IOS_DEFAULT_RUNTIME:-}"
+    if [ -z "$preferred_runtime" ] && command -v xcrun >/dev/null 2>&1; then
+      preferred_runtime="$(xcrun --sdk iphonesimulator --show-sdk-version 2>/dev/null || true)"
+    fi
   fi
   choice="$(resolve_runtime "$preferred_runtime" || true)"
   if [ -z "$choice" ]; then
@@ -400,12 +466,6 @@ ios_start() {
     return 1
   fi
   runtime_name="$(printf '%s' "$choice" | cut -d'|' -f2)"
-
-  device_base="$(resolve_service_device_name || true)"
-  if [ -z "$device_base" ]; then
-    echo "No iOS simulator device configured; set IOS_SIM_DEVICE or IOS_DEVICE_NAMES." >&2
-    return 1
-  fi
 
   ensure_device "$device_base" "$preferred_runtime"
   display_name="${device_base} (${runtime_name})"
@@ -452,7 +512,7 @@ ios_stop() {
 }
 
 ios_service() {
-  ios_start "$1"
+  ios_start "${1-}"
 
   trap 'ios_stop; exit 0' INT TERM
 

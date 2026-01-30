@@ -14,14 +14,9 @@ Each device file is JSON with:
 
 ## Config keys (`ios.json`)
 
-- `IOS_RUNTIME_MIN`
-- `IOS_RUNTIME_MAX`
-- `IOS_RUNTIME_CUSTOM`
-- `IOS_MIN_DEVICE`
-- `IOS_MAX_DEVICE`
-- `IOS_CUSTOM_DEVICE`
-- `IOS_DEVICE_NAMES`
+- `EVALUATE_DEVICES`
 - `IOS_DEFAULT_DEVICE`
+- `IOS_DEFAULT_RUNTIME`
 - `IOS_DEVELOPER_DIR`
 - `IOS_DOWNLOAD_RUNTIME`
 - `IOS_XCODE_ENV_PATH`
@@ -32,6 +27,8 @@ Each device file is JSON with:
 
 - `devbox run --pure start-sim [device]`
 - `devbox run --pure stop-sim`
+- `devbox run --pure ios.sh devices <command>`
+- `devbox run --pure ios.sh config <command>`
 
 ## Environment variables
 
@@ -39,5 +36,6 @@ Each device file is JSON with:
 - `IOS_DEVICES_DIR`
 - `IOS_SCRIPTS_DIR`
 - `IOS_DEFAULT_DEVICE`
+- `EVALUATE_DEVICES`
 - `SIM_HEADLESS`
 - `IOS_DEVICE_NAME`

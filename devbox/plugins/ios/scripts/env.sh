@@ -122,13 +122,88 @@ if [ -z "${IOS_NODE_BINARY:-}" ] && command -v node >/dev/null 2>&1; then
   export IOS_NODE_BINARY
 fi
 
+ios_resolve_devbox_bin() {
+  if [ -n "${DEVBOX_BIN:-}" ] && [ -x "$DEVBOX_BIN" ]; then
+    printf '%s\n' "$DEVBOX_BIN"
+    return 0
+  fi
+  if command -v devbox >/dev/null 2>&1; then
+    command -v devbox
+    return 0
+  fi
+  if [ -n "${DEVBOX_INIT_PATH:-}" ]; then
+    devbox_bin="$(PATH="$DEVBOX_INIT_PATH:$PATH" command -v devbox 2>/dev/null || true)"
+    if [ -n "$devbox_bin" ]; then
+      DEVBOX_BIN="$devbox_bin"
+      export DEVBOX_BIN
+      printf '%s\n' "$devbox_bin"
+      return 0
+    fi
+  fi
+  return 1
+}
+
+ios_latest_xcode_dev_dir() {
+  entries=""
+  for app in /Applications/Xcode*.app /Applications/Xcode.app; do
+    [ -d "$app/Contents/Developer" ] || continue
+    version="0"
+    if [ -x /usr/libexec/PlistBuddy ] && [ -f "$app/Contents/Info.plist" ]; then
+      version="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$app/Contents/Info.plist" 2>/dev/null || printf '0')"
+    fi
+    entries="${entries}${version}|${app}/Contents/Developer
+"
+  done
+  if [ -n "$entries" ]; then
+    printf '%s' "$entries" | sort -Vr | head -n1 | cut -d'|' -f2
+  fi
+}
+
+ios_resolve_developer_dir() {
+  desired="${IOS_DEVELOPER_DIR:-}"
+  if [ -n "$desired" ] && [ -d "$desired" ]; then
+    printf '%s\n' "$desired"
+    return 0
+  fi
+  desired="$(ios_latest_xcode_dev_dir 2>/dev/null || true)"
+  if [ -n "$desired" ] && [ -d "$desired" ]; then
+    printf '%s\n' "$desired"
+    return 0
+  fi
+  if command -v xcode-select >/dev/null 2>&1; then
+    desired="$(xcode-select -p 2>/dev/null || true)"
+    if [ -n "$desired" ] && [ -d "$desired" ]; then
+      printf '%s\n' "$desired"
+      return 0
+    fi
+  fi
+  if [ -d /Applications/Xcode.app/Contents/Developer ]; then
+    printf '%s\n' "/Applications/Xcode.app/Contents/Developer"
+    return 0
+  fi
+  return 1
+}
+
 devbox_omit_nix_env() {
   if [ "${DEVBOX_OMIT_NIX_ENV_APPLIED:-}" = "1" ]; then
     return 0
   fi
 
   export DEVBOX_OMIT_NIX_ENV_APPLIED=1
-  ios_require_tool devbox "devbox is required to configure the macOS toolchain. Run this script inside a devbox shell."
+  devbox_bin="$(ios_resolve_devbox_bin 2>/dev/null || true)"
+  if [ -z "$devbox_bin" ]; then
+    ios_debug_log "devbox not found; skipping omit-nix-env setup."
+    return 0
+  fi
+
+  devbox_init_path="${DEVBOX_INIT_PATH:-}"
+  devbox_bin_dir="$(dirname "$devbox_bin")"
+  devbox_project_bin=""
+  if [ -n "${DEVBOX_PROJECT_ROOT:-}" ] && [ -d "${DEVBOX_PROJECT_ROOT}/.devbox/bin" ]; then
+    devbox_project_bin="${DEVBOX_PROJECT_ROOT}/.devbox/bin"
+  elif [ -n "${DEVBOX_WD:-}" ] && [ -d "${DEVBOX_WD}/.devbox/bin" ]; then
+    devbox_project_bin="${DEVBOX_WD}/.devbox/bin"
+  fi
 
   dump_env() {
     if [ -n "${CI:-}" ] || [ -n "${GITHUB_ACTIONS:-}" ]; then
@@ -159,37 +234,40 @@ devbox_omit_nix_env() {
   fi
 
   if [ -n "$devbox_config_path" ]; then
-    eval "$(devbox --config "$devbox_config_path" shellenv --install --no-refresh-alias --omit-nix-env=true)"
+    eval "$("$devbox_bin" --config "$devbox_config_path" shellenv --install --no-refresh-alias --omit-nix-env=true)"
   else
-    eval "$(devbox shellenv --install --no-refresh-alias --omit-nix-env=true)"
+    eval "$("$devbox_bin" shellenv --install --no-refresh-alias --omit-nix-env=true)"
   fi
 
   if [ "$(uname -s)" = "Darwin" ]; then
-    PATH="$(printf '%s' "$PATH" | tr ':' '\n' | awk '!/^\/nix\/store\//{print}' | paste -sd ':' -)"
-
-    for var in CC CXX LD CPP AR AS NM RANLIB STRIP OBJC OBJCXX SDKROOT DEVELOPER_DIR; do
-      value="$(eval "printf '%s' \"\${$var-}\"")"
-      if [ -n "$value" ] && [ "${value#/nix/store/}" != "$value" ]; then
-        eval "unset $var"
-      fi
-    done
-
     if [ -x /usr/bin/clang ]; then
       CC=/usr/bin/clang
       CXX=/usr/bin/clang++
       export CC CXX
     fi
 
-    if command -v xcode-select >/dev/null 2>&1; then
-      dev_dir="$(xcode-select -p 2>/dev/null || true)"
-      if [ -n "$dev_dir" ]; then
-        DEVELOPER_DIR="$dev_dir"
-        export DEVELOPER_DIR
-      fi
+    dev_dir="$(ios_resolve_developer_dir 2>/dev/null || true)"
+    if [ -n "$dev_dir" ]; then
+      DEVELOPER_DIR="$dev_dir"
+      export DEVELOPER_DIR
+      PATH="$DEVELOPER_DIR/usr/bin:$PATH"
     fi
 
+    PATH="/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+    export PATH
     unset SDKROOT
   fi
+
+  if [ -n "$devbox_init_path" ]; then
+    PATH="${devbox_init_path}:${PATH}"
+  fi
+  if [ -n "$devbox_project_bin" ]; then
+    PATH="${devbox_project_bin}:${PATH}"
+  fi
+  if [ -n "$devbox_bin_dir" ]; then
+    PATH="${devbox_bin_dir}:${PATH}"
+  fi
+  export PATH
 
   dump_env "after"
 }
@@ -200,13 +278,7 @@ if [ "$(uname -s)" = "Darwin" ]; then
   PATH="/usr/bin:/bin:/usr/sbin:/sbin:${PATH}"
   export PATH
   if [ -z "${DEVELOPER_DIR:-}" ]; then
-    if command -v xcode-select >/dev/null 2>&1; then
-      dev_dir="$(xcode-select -p 2>/dev/null || true)"
-    elif [ -d /Applications/Xcode.app/Contents/Developer ]; then
-      dev_dir="/Applications/Xcode.app/Contents/Developer"
-    else
-      dev_dir=""
-    fi
+    dev_dir="$(ios_resolve_developer_dir 2>/dev/null || true)"
     if [ -n "${dev_dir:-}" ] && [ -d "$dev_dir" ]; then
       DEVELOPER_DIR="$dev_dir"
       PATH="$DEVELOPER_DIR/usr/bin:$PATH"
@@ -216,6 +288,11 @@ if [ "$(uname -s)" = "Darwin" ]; then
 fi
 
 if [ -n "${IOS_SCRIPTS_DIR:-}" ] && [ -d "${IOS_SCRIPTS_DIR}" ]; then
+  for script in ios.sh devices.sh select-device.sh simctl.sh; do
+    if [ -f "${IOS_SCRIPTS_DIR%/}/$script" ]; then
+      chmod +x "${IOS_SCRIPTS_DIR%/}/$script" 2>/dev/null || true
+    fi
+  done
   PATH="${IOS_SCRIPTS_DIR}:$PATH"
   export PATH
 fi
@@ -224,14 +301,9 @@ ios_debug_log_script "templates/devbox/plugins/ios/scripts/env.sh"
 
 if ios_debug_enabled; then
   ios_debug_dump_vars \
-    IOS_RUNTIME \
-    IOS_RUNTIME_MIN \
-    IOS_RUNTIME_MAX \
-    IOS_RUNTIME_CUSTOM \
-    IOS_DEVICE_NAMES \
-    IOS_MIN_DEVICE \
-    IOS_MAX_DEVICE \
-    IOS_CUSTOM_DEVICE \
+    EVALUATE_DEVICES \
+    IOS_DEFAULT_DEVICE \
+    IOS_DEFAULT_RUNTIME \
     IOS_DEVELOPER_DIR \
     IOS_DOWNLOAD_RUNTIME \
     IOS_XCODE_ENV_PATH \
@@ -245,7 +317,7 @@ if [ -n "${INIT_IOS:-}" ] && [ -z "${CI:-}" ] && [ -z "${GITHUB_ACTIONS:-}" ] &&
   IOS_SDK_SUMMARY_PRINTED=1
   export IOS_SDK_SUMMARY_PRINTED
 
-  ios_runtime="${IOS_RUNTIME_MAX:-}"
+  ios_runtime="${IOS_DEFAULT_RUNTIME:-}"
   if [ -z "$ios_runtime" ] && command -v xcrun >/dev/null 2>&1; then
     ios_runtime="$(xcrun --sdk iphonesimulator --show-sdk-version 2>/dev/null || true)"
   fi
@@ -260,20 +332,8 @@ if [ -n "${INIT_IOS:-}" ] && [ -z "${CI:-}" ] && [ -z "${GITHUB_ACTIONS:-}" ] &&
     xcode_version="$(xcodebuild -version 2>/dev/null | awk 'NR==1{print $2}')"
   fi
 
-  ios_target_device="${DETOX_IOS_DEVICE:-}"
-  if [ -z "$ios_target_device" ]; then
-    if [ -n "${IOS_DEVICE_NAMES:-}" ]; then
-      ios_target_device="$(printf '%s' "$IOS_DEVICE_NAMES" | cut -d',' -f1 | xargs)"
-    else
-      case "${TARGET_SDK:-max}" in
-        min) ios_target_device="${IOS_MIN_DEVICE:-}" ;;
-        max) ios_target_device="${IOS_MAX_DEVICE:-}" ;;
-        custom) ios_target_device="${IOS_CUSTOM_DEVICE:-}" ;;
-        *) ios_target_device="${IOS_MAX_DEVICE:-}" ;;
-      esac
-    fi
-  fi
-  ios_target_runtime="${IOS_RUNTIME:-$ios_runtime}"
+  ios_target_device="${IOS_DEFAULT_DEVICE:-}"
+  ios_target_runtime="${ios_runtime:-}"
 
   echo "Resolved iOS SDK"
   echo "  DEVELOPER_DIR: ${xcode_dir:-not set}"

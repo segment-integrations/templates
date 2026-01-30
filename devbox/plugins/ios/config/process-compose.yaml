@@ -1,12 +1,10 @@
 version: "0.5"
+
 processes:
   ios-simulator:
-    command: >-
-      bash -lc 'root="${DEVBOX_PROJECT_ROOT:-${DEVBOX_PROJECT_DIR:-${DEVBOX_WD:-$PWD}}}";
-      . "$root/.devbox/virtenv/ios/scripts/simctl.sh";
-      ios_service'
+    command: "bash -lc '. \"{{ .Virtenv }}/scripts/simctl.sh\"; ios_service'"
     availability:
       restart: "on_failure"
     shutdown:
-      signal: SIGTERM
+      signal: 15
       timeout: 120

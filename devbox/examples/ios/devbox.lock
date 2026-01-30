@@ -556,6 +556,54 @@
           "store_path": "/nix/store/qnaw7i777j52fpgbl5pgmzkq85znp083-jq-1.8.1-bin"
         }
       }
+    },
+    "process-compose@latest": {
+      "last_modified": "2026-01-23T17:20:52Z",
+      "resolved": "github:NixOS/nixpkgs/a1bab9e494f5f4939442a57a58d0449a109593fe#process-compose",
+      "source": "devbox-search",
+      "version": "1.87.0",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/vp8dbw54aif4cbx8h11q99nr8kbyd8y6-process-compose-1.87.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/vp8dbw54aif4cbx8h11q99nr8kbyd8y6-process-compose-1.87.0"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/4bry8d3a5s6dypb41g2b48vizimzbhbc-process-compose-1.87.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/4bry8d3a5s6dypb41g2b48vizimzbhbc-process-compose-1.87.0"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/yr15a9rgjmwma28n3hjpilw77hhb3aqk-process-compose-1.87.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/yr15a9rgjmwma28n3hjpilw77hhb3aqk-process-compose-1.87.0"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/xgixy092whsar7fwm9lmcn4mv9kqn983-process-compose-1.87.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/xgixy092whsar7fwm9lmcn4mv9kqn983-process-compose-1.87.0"
+        }
+      }
     }
   }
 }

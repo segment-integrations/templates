@@ -4,7 +4,7 @@ This plugin configures iOS tooling inside Devbox, including enforcing the macOS 
 managing simulator defaults via a project-local config file.
 
 - Project config: `devbox.d/ios/ios.json`
-- Scripts: `scripts/env.sh`, `scripts/simctl.sh`
+- Scripts: `.devbox/virtenv/ios/scripts`
 
 ## Reference
 

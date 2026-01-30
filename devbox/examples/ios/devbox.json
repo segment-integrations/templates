@@ -4,5 +4,8 @@
     "scripts": {
       "build": "swift build"
     }
+  },
+  "packages": {
+    "process-compose": "latest"
   }
 }

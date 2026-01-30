@@ -1,12 +1,10 @@
 version: "0.5"
+
 processes:
   android-emulator:
-    command: >-
-      bash -lc 'root="${DEVBOX_PROJECT_ROOT:-${DEVBOX_PROJECT_DIR:-${DEVBOX_WD:-$PWD}}}";
-      . "$root/.devbox/virtenv/android/scripts/avd.sh";
-      android_service'
+    command: "bash -lc '. \"{{ .Virtenv }}/scripts/avd.sh\"; android_service'"
     availability:
       restart: "on_failure"
     shutdown:
-      signal: SIGTERM
+      signal: 15
       timeout: 120

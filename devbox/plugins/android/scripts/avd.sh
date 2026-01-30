@@ -451,7 +451,7 @@ android_start() {
 }
 
 android_service() {
-  android_start "$1"
+  android_start "${1-}"
 
   trap 'android_stop; exit 0' INT TERM
 
