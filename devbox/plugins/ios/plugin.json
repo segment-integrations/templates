@@ -26,7 +26,7 @@
     "{{ .Virtenv }}/scripts/ios.sh": "scripts/ios.sh",
     "{{ .Virtenv }}/scripts/devices.sh": "scripts/devices.sh",
     "{{ .Virtenv }}/scripts/select-device.sh": "scripts/select-device.sh",
-    "{{ .DevboxDir }}/config/ios.json": "config/ios.json",
+    "{{ .Virtenv }}/config/ios.json": "config/ios.json",
     "{{ .DevboxDir }}/devices/min.json": "config/devices/min.json",
     "{{ .DevboxDir }}/devices/max.json": "config/devices/max.json",
     "{{ .DevboxDir }}/ios.json": "config/ios.json"
@@ -36,37 +36,6 @@
       ". {{ .Virtenv }}/scripts/env.sh"
     ],
     "scripts": {
-      "start-sim": [
-        "if [ -n \"${DEVBOX_INIT_PATH:-}\" ]; then",
-        "  PATH=\"$DEVBOX_INIT_PATH:$PATH\"",
-        "fi",
-        "if [ -n \"${HOME:-}\" ] && [ -x \"${HOME}/.nix-profile/bin/devbox\" ]; then",
-        "  PATH=\"${HOME}/.nix-profile/bin:$PATH\"",
-        "fi",
-        "if [ -x \"/nix/var/nix/profiles/default/bin/devbox\" ]; then",
-        "  PATH=\"/nix/var/nix/profiles/default/bin:$PATH\"",
-        "fi",
-        "export PATH",
-        "device_name=\"${1-}\"",
-        "if [ -n \"${SIM_HEADLESS:-}\" ]; then",
-        "  devbox services up -b --env SIM_HEADLESS=\"$SIM_HEADLESS\" --env IOS_DEVICE_NAME=\"$device_name\" ios-simulator",
-        "else",
-        "  devbox services up -b --env IOS_DEVICE_NAME=\"$device_name\" ios-simulator",
-        "fi"
-      ],
-      "stop-sim": [
-        "if [ -n \"${DEVBOX_INIT_PATH:-}\" ]; then",
-        "  PATH=\"$DEVBOX_INIT_PATH:$PATH\"",
-        "fi",
-        "if [ -n \"${HOME:-}\" ] && [ -x \"${HOME}/.nix-profile/bin/devbox\" ]; then",
-        "  PATH=\"${HOME}/.nix-profile/bin:$PATH\"",
-        "fi",
-        "if [ -x \"/nix/var/nix/profiles/default/bin/devbox\" ]; then",
-        "  PATH=\"/nix/var/nix/profiles/default/bin:$PATH\"",
-        "fi",
-        "export PATH",
-        "devbox services stop ios-simulator"
-      ],
       "start-ios": [
         ". {{ .Virtenv }}/scripts/simctl.sh",
         "ios_run_app \"${1-}\""

@@ -485,10 +485,73 @@ android_stop() {
   echo "Android emulators stopped (if any were running)."
 }
 
+android_run_build() {
+  project_root="$1"
+  if ! command -v devbox >/dev/null 2>&1; then
+    echo "devbox is required to run the project build." >&2
+    return 1
+  fi
+  (cd "$project_root" && devbox run --pure build-android)
+}
+
+android_resolve_apk_path() {
+  project_root="$1"
+  pattern="${2:-}"
+  if [ -z "$pattern" ]; then
+    return 1
+  fi
+  if [ "${pattern#/}" = "$pattern" ]; then
+    pattern="${project_root%/}/$pattern"
+  fi
+  set +f
+  matches=""
+  for candidate in $pattern; do
+    if [ -f "$candidate" ]; then
+      matches="${matches}${matches:+
+}$candidate"
+    fi
+  done
+  set -f
+  if [ -z "$matches" ]; then
+    return 1
+  fi
+  count="$(printf '%s\n' "$matches" | wc -l | tr -d ' ')"
+  if [ "$count" -gt 1 ]; then
+    echo "Multiple APKs matched ${pattern}; using the first match." >&2
+  fi
+  printf '%s\n' "$matches" | head -n1
+}
+
+android_resolve_aapt() {
+  if command -v aapt >/dev/null 2>&1; then
+    printf '%s\n' "aapt"
+    return 0
+  fi
+  if [ -n "${ANDROID_SDK_ROOT:-}" ]; then
+    if [ -n "${ANDROID_BUILD_TOOLS_VERSION:-}" ]; then
+      tool="${ANDROID_SDK_ROOT%/}/build-tools/${ANDROID_BUILD_TOOLS_VERSION}/aapt"
+      if [ -x "$tool" ]; then
+        printf '%s\n' "$tool"
+        return 0
+      fi
+    fi
+    tool="$(find "${ANDROID_SDK_ROOT%/}/build-tools" -type f -name aapt 2>/dev/null | sort | tail -n1)"
+    if [ -n "$tool" ] && [ -x "$tool" ]; then
+      printf '%s\n' "$tool"
+      return 0
+    fi
+  fi
+  return 1
+}
+
 android_run_app() {
   device_choice="${1:-${TARGET_DEVICE:-}}"
   if [ -z "$device_choice" ] && [ -n "${ANDROID_DEFAULT_DEVICE:-}" ]; then
     device_choice="$ANDROID_DEFAULT_DEVICE"
+  fi
+
+  if [ -n "${ANDROID_SCRIPTS_DIR:-}" ] && [ -x "${ANDROID_SCRIPTS_DIR%/}/devices.sh" ]; then
+    "${ANDROID_SCRIPTS_DIR%/}/devices.sh" eval >/dev/null || true
   fi
 
   android_start "$device_choice"
@@ -499,39 +562,69 @@ android_run_app() {
     exit 1
   fi
 
-  app_id="${ANDROID_APP_ID:-}"
+  android_run_build "$project_root"
+
+  apk_pattern="${ANDROID_APP_APK:-app/build/outputs/apk/debug/*.apk}"
+  apk_path="$(android_resolve_apk_path "$project_root" "$apk_pattern" || true)"
+  if [ -z "$apk_path" ] || [ ! -f "$apk_path" ]; then
+    echo "Unable to locate APK using ANDROID_APP_APK=${apk_pattern}." >&2
+    exit 1
+  fi
+
+  aapt_bin="$(android_resolve_aapt || true)"
+  if [ -z "$aapt_bin" ]; then
+    echo "Unable to locate aapt for APK metadata. Ensure Android build-tools are installed." >&2
+    exit 1
+  fi
+  badging="$("$aapt_bin" dump badging "$apk_path" 2>/dev/null || true)"
+  app_id="$(printf '%s\n' "$badging" | awk -F"'" '/package: name=/{print $2; exit}')"
+  activity="$(printf '%s\n' "$badging" | awk -F"'" '/launchable-activity: name=/{print $2; exit}')"
+  app_id="$(printf '%s' "$app_id" | tr -d '\r' | awk '{print $1}')"
+  activity="$(printf '%s' "$activity" | tr -d '\r' | awk '{print $1}')"
   if [ -z "$app_id" ]; then
-    echo "ANDROID_APP_ID is required to start the app (e.g. com.example.app)." >&2
+    echo "Unable to read package name from ${apk_path}." >&2
     exit 1
   fi
-
-  apk_path="${ANDROID_APP_APK:-}"
-  if [ -z "$apk_path" ]; then
-    apk_path="$(find "$project_root" -path "*/build/outputs/apk/debug/*.apk" -type f | head -n1)"
-  fi
-  if [ -z "$apk_path" ] || [ ! -f "$apk_path" ]; then
-    echo "Debug APK not found. Building with Gradle..." >&2
-    (cd "$project_root" && gradle assembleDebug)
-    apk_path="$(find "$project_root" -path "*/build/outputs/apk/debug/*.apk" -type f | head -n1)"
-  fi
-  if [ -z "$apk_path" ] || [ ! -f "$apk_path" ]; then
-    echo "Unable to locate debug APK under ${project_root}." >&2
+  if [ -z "$activity" ]; then
+    echo "Unable to resolve launchable activity for ${app_id}." >&2
     exit 1
   fi
-
   target_serial="${ANDROID_EMULATOR_SERIAL:-emulator-${EMU_PORT:-5554}}"
   adb -s "$target_serial" wait-for-device
   adb -s "$target_serial" install -r "$apk_path" >/dev/null
 
-  activity="${ANDROID_APP_ACTIVITY:-}"
-  if [ -z "$activity" ]; then
-    activity="$(adb -s "$target_serial" shell cmd package resolve-activity --brief "$app_id" 2>/dev/null | tr -d "\r" | tail -n1)"
+  component="$(adb -s "$target_serial" shell cmd package resolve-activity --brief "$app_id" 2>/dev/null | tr -d '\r' | tail -n1)"
+  component="$(printf '%s' "$component" | awk '{print $1}')"
+  if [ -z "$component" ]; then
+    case "$activity" in
+      */*) component="$activity" ;;
+      .*) component="${app_id}/${activity}" ;;
+      "${app_id}"*) component="${app_id}/${activity}" ;;
+      *) component="${app_id}/${activity}" ;;
+    esac
+  elif [ "${component#*/}" = "$component" ]; then
+    if [ -n "$activity" ]; then
+      component="${app_id}/${activity}"
+    else
+      component="${app_id}/${component}"
+    fi
   fi
-  if [ -z "$activity" ]; then
-    echo "Unable to resolve launch activity for ${app_id}." >&2
-    return 1
+  android_debug_log "Launch component: ${component}"
+
+  component="$activity"
+  case "$activity" in
+    */*) component="$activity" ;;
+    .*) component="${app_id}/${activity}" ;;
+    "${app_id}"*) component="${app_id}/${activity}" ;;
+    *) component="${app_id}/${activity}" ;;
+  esac
+
+  adb -s "$target_serial" shell am start -n "$component" >/dev/null 2>&1 || \
+    adb -s "$target_serial" shell monkey -p "$app_id" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || true
+
+  if ! adb -s "$target_serial" shell pidof "$app_id" >/dev/null 2>&1; then
+    echo "Warning: app process for ${app_id} not detected after launch attempt." >&2
   fi
-  adb -s "$target_serial" shell am start -n "$activity" >/dev/null || true
 }
 
 android_reset() {

@@ -22,8 +22,11 @@ devbox run --pure android.sh devices list
 devbox run --pure start-emu max
 
 # Build + install + launch on the resolved emulator
-ANDROID_APP_ID=com.example.app devbox run --pure start-android max
+devbox run --pure start-android max
 ```
+
+`start-android` runs `devbox run --pure build-android` in the project and installs the APK matched by
+`ANDROID_APP_APK`.
 
 ## Reference
 
@@ -74,5 +77,4 @@ devbox run --pure android.sh config reset
 - `ANDROID_SCRIPTS_DIR` — runtime scripts directory (`.devbox/virtenv/android/scripts`)
 - `ANDROID_DEFAULT_DEVICE` — used when no device name is provided
 - `EVALUATE_DEVICES` — list of device names to evaluate in the flake (empty means all)
-- `ANDROID_APP_ID` — required for `start-android`
-- `ANDROID_APP_ACTIVITY` — optional override for `start-android`
+- `ANDROID_APP_APK` — APK path or glob pattern (relative to project root) used for install/launch

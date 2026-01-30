@@ -6,7 +6,10 @@ buildscript {
         minSdkVersion = 24
         compileSdkVersion = compileSdkEnv.toInteger()
         targetSdkVersion = targetSdkEnv.toInteger()
-        ndkVersion = "27.1.12297006"
+        def ndkVersionEnv = System.getenv("ANDROID_NDK_VERSION")
+        if (ndkVersionEnv) {
+            ndkVersion = ndkVersionEnv
+        }
         kotlinVersion = "2.1.20"
     }
     repositories {

@@ -26,27 +26,18 @@
           acc: item: if builtins.elem item acc then acc else acc ++ [ item ]
         ) [ ] list;
 
+      lockData =
+        builtins.fromJSON (
+          builtins.readFile ./devices.lock.json
+        );
+      deviceApis =
+        if builtins.hasAttr "api_versions" lockData then lockData.api_versions else [ ];
       androidSdkConfig = {
-        platformVersions = unique [
-          (getVar "ANDROID_MIN_API")
-          (getVar "ANDROID_MAX_API")
-          (getVar "ANDROID_CUSTOM_API")
-        ];
+        platformVersions = unique (map toString deviceApis);
         buildToolsVersion = getVar "ANDROID_BUILD_TOOLS_VERSION";
         cmdLineToolsVersion = getVar "ANDROID_CMDLINE_TOOLS_VERSION";
         systemImageTypes = [ (getVar "ANDROID_SYSTEM_IMAGE_TAG") ];
-      };
-      androidSdkConfigMin = androidSdkConfig // {
-        platformVersions = unique [
-          (getVar "ANDROID_MIN_API")
-          (getVar "ANDROID_MAX_API")
-        ];
-      };
-      androidSdkConfigMax = androidSdkConfig // {
-        platformVersions = [ (getVar "ANDROID_MAX_API") ];
-      };
-      androidSdkConfigCustom = androidSdkConfig // {
-        platformVersions = [ (getVar "ANDROID_CUSTOM_API") ];
+        ndkVersion = getVar "ANDROID_NDK_VERSION";
       };
 
       forAllSystems =
@@ -80,16 +71,14 @@
               cmdLineToolsVersion = config.cmdLineToolsVersion;
               includeEmulator = true;
               includeSystemImages = true;
-              includeNDK = false;
+              includeNDK = config.ndkVersion != "";
+              ndkVersions = if config.ndkVersion != "" then [ config.ndkVersion ] else [ ];
               abiVersions = abiVersions;
               systemImageTypes = config.systemImageTypes;
             };
         in
         {
           android-sdk = (androidPkgs androidSdkConfig).androidsdk;
-          android-sdk-min = (androidPkgs androidSdkConfigMin).androidsdk;
-          android-sdk-max = (androidPkgs androidSdkConfigMax).androidsdk;
-          android-sdk-custom = (androidPkgs androidSdkConfigCustom).androidsdk;
           default = (androidPkgs androidSdkConfig).androidsdk;
         }
       );

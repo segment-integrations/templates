@@ -20,6 +20,7 @@ Each device file is JSON with:
 - `IOS_APP_PROJECT`
 - `IOS_APP_SCHEME`
 - `IOS_APP_BUNDLE_ID`
+- `IOS_APP_ARTIFACT` (path or glob relative to project root)
 - `IOS_APP_DERIVED_DATA`
 - `IOS_DEVELOPER_DIR`
 - `IOS_DOWNLOAD_RUNTIME`
@@ -32,6 +33,10 @@ Each device file is JSON with:
 - `devbox run --pure start-sim [device]`
 - `devbox run --pure stop-sim`
 - `devbox run --pure start-ios [device]`
+
+`start-ios` runs `devbox run --pure build-ios` in the project, then installs the app bundle matched by
+`IOS_APP_ARTIFACT`. If `IOS_APP_BUNDLE_ID` is not set, the bundle identifier is read from the app's
+`Info.plist`.
 - `devbox run --pure ios.sh devices <command>`
 - `devbox run --pure ios.sh config <command>`
 

@@ -3,7 +3,16 @@
   "packages": ["nodejs@20", "watchman@latest"],
   "shell": {
     "scripts": {
-      "build": "cd android && gradle assembleDebug"
+      "build-node": "npm install",
+      "build-android": "devbox run --pure build-node && cd android && gradle assembleDebug",
+      "build-ios": "devbox run --pure build-node && cd ios && env -u LD -u LDFLAGS -u NIX_LDFLAGS -u NIX_CFLAGS_COMPILE -u NIX_CFLAGS_LINK xcodebuild -project ReactNativeExample.xcodeproj -scheme ReactNativeExample -configuration Debug -destination 'generic/platform=iOS Simulator' -derivedDataPath ../.devbox/virtenv/ios/DerivedData build",
+      "build-web": "devbox run --pure build-node && node -e \"const path = process.env.WEB_BUILD_PATH || 'web/build'; require('fs').mkdirSync(path, { recursive: true });\"",
+      "build": [
+        "devbox run --pure build-node",
+        "cd android && gradle assembleDebug",
+        "cd ios && env -u LD -u LDFLAGS -u NIX_LDFLAGS -u NIX_CFLAGS_COMPILE -u NIX_CFLAGS_LINK xcodebuild -project ReactNativeExample.xcodeproj -scheme ReactNativeExample -configuration Debug -destination 'generic/platform=iOS Simulator' -derivedDataPath ../.devbox/virtenv/ios/DerivedData build",
+        "node -e \"const path = process.env.WEB_BUILD_PATH || 'web/build'; require('fs').mkdirSync(path, { recursive: true });\""
+      ]
     }
   }
 }

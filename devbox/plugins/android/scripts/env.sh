@@ -200,11 +200,10 @@ if [ -z "${ANDROID_SDK_FLAKE_OUTPUT:-}" ]; then
   export ANDROID_SDK_FLAKE_OUTPUT
 fi
 
-if [ -z "${ANDROID_SDK_ROOT:-}" ] && [ -n "${ANDROID_HOME:-}" ]; then
-  ANDROID_SDK_ROOT="$ANDROID_HOME"
-fi
-
 if [ -n "$prefer_local" ]; then
+  if [ -z "${ANDROID_SDK_ROOT:-}" ] && [ -n "${ANDROID_HOME:-}" ]; then
+    ANDROID_SDK_ROOT="$ANDROID_HOME"
+  fi
   if [ -z "${ANDROID_SDK_ROOT:-}" ]; then
     detected_root="$(detect_sdk_root_from_sdkmanager 2>/dev/null || true)"
     if [ -n "$detected_root" ]; then

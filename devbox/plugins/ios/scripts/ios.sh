@@ -70,12 +70,15 @@ case "$command_name" in
         mv "$tmp" "$config_path"
         ;;
       reset)
-        default_config="${config_dir%/}/config/ios.json"
-        if [ ! -f "$default_config" ]; then
-          default_config="${config_dir%/}/ios.json"
+        default_config=""
+        if [ -n "${IOS_SCRIPTS_DIR:-}" ]; then
+          candidate="${IOS_SCRIPTS_DIR%/}/../config/ios.json"
+          if [ -f "$candidate" ]; then
+            default_config="$candidate"
+          fi
         fi
-        if [ ! -f "$default_config" ]; then
-          echo "Default iOS config not found under ${config_dir%/}/config" >&2
+        if [ -z "$default_config" ]; then
+          echo "Default iOS config not found; reinstall the plugin to restore defaults." >&2
           exit 1
         fi
         cp "$default_config" "$config_path"

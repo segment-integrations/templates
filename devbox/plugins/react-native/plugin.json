@@ -5,5 +5,31 @@
   "include": [
     "path:../android/plugin.json",
     "path:../ios/plugin.json"
-  ]
+  ],
+  "env": {
+    "REACT_NATIVE_CONFIG_DIR": "{{ .DevboxDir }}",
+    "REACT_NATIVE_SCRIPTS_DIR": "{{ .Virtenv }}/scripts"
+  },
+  "create_files": {
+    "{{ .Virtenv }}/scripts/env.sh": "scripts/env.sh",
+    "{{ .Virtenv }}/config/react-native.json": "config/react-native.json",
+    "{{ .Virtenv }}/process-compose.yaml": "config/process-compose.yaml",
+    "{{ .DevboxDir }}/react-native.json": "config/react-native.json"
+  },
+  "shell": {
+    "init_hook": [
+      ". {{ .Virtenv }}/scripts/env.sh"
+    ],
+    "scripts": {
+      "start-android": [
+        "devbox services start rn-metro || devbox services up -b rn-metro",
+        "npx react-native run-android --no-packager"
+      ],
+      "start-ios": [
+        "devbox services start rn-metro || devbox services up -b rn-metro",
+        "npx react-native run-ios --no-packager"
+      ],
+      "start-web": "devbox services start rn-metro || devbox services up rn-metro"
+    }
+  }
 }

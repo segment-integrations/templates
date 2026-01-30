@@ -31,9 +31,10 @@
     "{{ .Virtenv }}/scripts/android.sh": "scripts/android.sh",
     "{{ .Virtenv }}/scripts/devices.sh": "scripts/devices.sh",
     "{{ .Virtenv }}/scripts/select-device.sh": "scripts/select-device.sh",
-    "{{ .DevboxDir }}/config/android.json": "config/android.json",
+    "{{ .Virtenv }}/config/android.json": "config/android.json",
     "{{ .DevboxDir }}/devices/min.json": "config/devices/min.json",
     "{{ .DevboxDir }}/devices/max.json": "config/devices/max.json",
+    "{{ .DevboxDir }}/devices.lock.json": "config/devices.lock.json",
     "{{ .DevboxDir }}/android.json": "config/android.json",
     "{{ .DevboxDir }}/flake.nix": "config/flake.nix",
     "{{ .DevboxDir }}/flake.lock": "config/flake.lock"
@@ -43,19 +44,10 @@
       ". {{ .Virtenv }}/scripts/env.sh"
     ],
     "scripts": {
-      "start-emu": [
-        "device_name=\"${1-}\"",
-        "if [ -n \"${EMU_HEADLESS:-}\" ]; then",
-        "  devbox services up -b --env EMU_HEADLESS=\"$EMU_HEADLESS\" --env ANDROID_DEVICE_NAME=\"$device_name\" android-emulator",
-        "else",
-        "  devbox services up -b --env ANDROID_DEVICE_NAME=\"$device_name\" android-emulator",
-        "fi"
-      ],
       "start-android": [
         ". {{ .Virtenv }}/scripts/avd.sh",
         "android_run_app \"${1-}\""
-      ],
-      "stop-emu": "devbox services stop android-emulator"
+      ]
     }
   }
 }

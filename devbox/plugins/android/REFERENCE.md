@@ -4,6 +4,7 @@
 
 - `devbox.d/android/android.json` — project config (generated on first activation)
 - `devbox.d/android/devices/*.json` — device definitions
+- `devbox.d/android/devices.lock.json` — resolved API list for the SDK flake
 - `.devbox/virtenv/android/scripts` — runtime scripts (added to PATH)
 - `devbox.d/android/flake.nix` — SDK flake (device APIs drive evaluation)
 
@@ -25,10 +26,15 @@ Each device file is JSON with:
 - `ANDROID_HOME`
 - `ANDROID_COMPILE_SDK`
 - `ANDROID_TARGET_SDK`
+- `ANDROID_PLATFORM_VERSIONS` (array; extra SDK platforms to include)
 - `EVALUATE_DEVICES` (array; empty means all)
 - `ANDROID_DEFAULT_DEVICE`
 - `ANDROID_SYSTEM_IMAGE_TAG`
+- `ANDROID_APP_APK` (path or glob relative to project root)
 - `ANDROID_BUILD_TOOLS_VERSION`
+- `ANDROID_NDK_VERSION`
+- `ANDROID_CMAKE_VERSION` (string; preferred CMake version)
+- `ANDROID_CMAKE_VERSIONS` (array; empty to skip CMake)
 - `ANDROID_CMDLINE_TOOLS_VERSION`
 
 ## Commands
@@ -40,8 +46,8 @@ Each device file is JSON with:
 
 ### Build + run
 
-- `ANDROID_APP_ID=<id> devbox run --pure start-android [device]`
-- Optional: `ANDROID_APP_ACTIVITY=<activity>`
+- `devbox run --pure start-android [device]`
+  - Runs `devbox run --pure build-android` in the project and installs the APK matched by `ANDROID_APP_APK`.
 
 ### Device management
 
@@ -67,8 +73,7 @@ Each device file is JSON with:
 - `ANDROID_SCRIPTS_DIR`
 - `ANDROID_DEFAULT_DEVICE`
 - `EVALUATE_DEVICES`
-- `ANDROID_APP_ID`
-- `ANDROID_APP_ACTIVITY`
+- `ANDROID_APP_APK`
 - `EMU_HEADLESS`
 - `EMU_PORT`
 - `ANDROID_DEVICE_NAME`

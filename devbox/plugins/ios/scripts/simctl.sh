@@ -551,45 +551,84 @@ ios_resolve_derived_data() {
   printf '%s\n' "./.devbox/virtenv/ios/DerivedData"
 }
 
-ios_build_app() {
-  ios_require_tool xcodebuild
-  project="$(ios_resolve_app_project || true)"
-  scheme="$(ios_resolve_app_scheme || true)"
-  if [ -z "$project" ] || [ -z "$scheme" ]; then
-    echo "Unable to resolve iOS project/scheme. Set IOS_APP_PROJECT and IOS_APP_SCHEME." >&2
-    return 1
+ios_resolve_project_root() {
+  if [ -n "${DEVBOX_PROJECT_ROOT:-}" ]; then
+    printf '%s\n' "${DEVBOX_PROJECT_ROOT%/}"
+    return 0
   fi
-  derived_data="$(ios_resolve_derived_data)"
-  mkdir -p "$derived_data"
-  env -u LD -u LDFLAGS -u NIX_LDFLAGS -u NIX_CFLAGS_COMPILE -u NIX_CFLAGS_LINK \
-    xcodebuild -project "$project" -scheme "$scheme" -configuration Debug \
-    -destination 'generic/platform=iOS Simulator' \
-    -derivedDataPath "$derived_data" build
+  if [ -n "${DEVBOX_PROJECT_DIR:-}" ]; then
+    printf '%s\n' "${DEVBOX_PROJECT_DIR%/}"
+    return 0
+  fi
+  if [ -n "${DEVBOX_WD:-}" ]; then
+    printf '%s\n' "${DEVBOX_WD%/}"
+    return 0
+  fi
+  printf '%s\n' "$PWD"
 }
 
-ios_app_path() {
-  scheme="$(ios_resolve_app_scheme || true)"
-  derived_data="$(ios_resolve_derived_data)"
-  if [ -z "$scheme" ]; then
+ios_run_build() {
+  project_root="$(ios_resolve_project_root)"
+  if [ -z "$project_root" ] || [ ! -d "$project_root" ]; then
+    echo "Unable to resolve project root for iOS build." >&2
     return 1
   fi
-  printf '%s\n' "${derived_data%/}/Build/Products/Debug-iphonesimulator/${scheme}.app"
+  devbox_bin="$(ios_resolve_devbox_bin 2>/dev/null || true)"
+  if [ -z "$devbox_bin" ]; then
+    echo "devbox is required to run the project build." >&2
+    return 1
+  fi
+  (cd "$project_root" && "$devbox_bin" run --pure build-ios)
+}
+
+ios_resolve_app_path() {
+  project_root="$(ios_resolve_project_root)"
+  pattern="${IOS_APP_ARTIFACT:-}"
+  if [ -z "$pattern" ]; then
+    return 1
+  fi
+  if [ "${pattern#/}" = "$pattern" ]; then
+    pattern="${project_root%/}/$pattern"
+  fi
+  set +f
+  matches=""
+  for candidate in $pattern; do
+    if [ -d "$candidate" ]; then
+      matches="${matches}${matches:+
+}$candidate"
+    fi
+  done
+  set -f
+  if [ -z "$matches" ]; then
+    return 1
+  fi
+  count="$(printf '%s\n' "$matches" | wc -l | tr -d ' ')"
+  if [ "$count" -gt 1 ]; then
+    echo "Multiple app bundles matched ${pattern}; using the first match." >&2
+  fi
+  printf '%s\n' "$matches" | head -n1
 }
 
 ios_run_app() {
   device_name="${1-}"
   ios_start "$device_name"
 
-  ios_build_app
+  ios_run_build
 
-  app_path="$(ios_app_path || true)"
-  bundle_id="$(ios_resolve_app_bundle_id || true)"
+  app_path="$(ios_resolve_app_path || true)"
   if [ -z "$app_path" ] || [ ! -d "$app_path" ]; then
-    echo "Built app not found at ${app_path}." >&2
+    echo "Unable to locate app bundle using IOS_APP_ARTIFACT=${IOS_APP_ARTIFACT:-}." >&2
     return 1
   fi
+  bundle_id="$(ios_resolve_app_bundle_id || true)"
   if [ -z "$bundle_id" ]; then
-    echo "IOS_APP_BUNDLE_ID is required to launch the app." >&2
+    plist="${app_path%/}/Info.plist"
+    if [ -f "$plist" ]; then
+      bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$plist" 2>/dev/null || true)"
+    fi
+  fi
+  if [ -z "$bundle_id" ]; then
+    echo "Unable to resolve bundle identifier for ${app_path}." >&2
     return 1
   fi
   udid="${IOS_SIM_UDID:-}"

@@ -140,6 +140,14 @@ ios_resolve_devbox_bin() {
       return 0
     fi
   fi
+  for candidate in "$HOME/.nix-profile/bin/devbox" "/usr/local/bin/devbox" "/opt/homebrew/bin/devbox"; do
+    if [ -x "$candidate" ]; then
+      DEVBOX_BIN="$candidate"
+      export DEVBOX_BIN
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
   return 1
 }
 

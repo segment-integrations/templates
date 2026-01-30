@@ -26,47 +26,26 @@
           acc: item: if builtins.elem item acc then acc else acc ++ [ item ]
         ) [ ] list;
 
-      devicesDir = ./devices;
-      evaluateDevices =
-        if builtins.hasAttr "EVALUATE_DEVICES" defaultsData then defaultsData.EVALUATE_DEVICES else [ ];
-      deviceFiles =
-        let
-          entries = builtins.readDir devicesDir;
-          names = builtins.attrNames entries;
-          allFiles = builtins.filter (name: builtins.match ".*\\.json" name != null) names;
-          normalize = name: builtins.replaceStrings [ ".json" ] [ "" ] name;
-          matches =
-            selection: file:
-            let
-              data = builtins.fromJSON (builtins.readFile (devicesDir + "/${file}"));
-              deviceName = if builtins.hasAttr "name" data then toString data.name else "";
-            in
-            normalize file == selection || deviceName == selection;
-          resolveSelection =
-            selection:
-            let
-              filtered = builtins.filter (matches selection) allFiles;
-            in
-            if filtered == [ ] then builtins.throw "EVALUATE_DEVICES '${selection}' not found in devbox.d/android/devices."
-            else filtered;
-          selectedFiles = builtins.concatLists (map resolveSelection evaluateDevices);
-        in
-        if evaluateDevices == [ ] then allFiles else unique selectedFiles;
+      lockData =
+        builtins.fromJSON (
+          builtins.readFile ./devices.lock.json
+        );
       deviceApis =
-        let
-          apiFromFile =
-            name:
-            let
-              data = builtins.fromJSON (builtins.readFile (devicesDir + "/${name}"));
-            in
-            if builtins.hasAttr "api" data then toString data.api else null;
-        in
-        builtins.filter (api: api != null) (map apiFromFile deviceFiles);
+        if builtins.hasAttr "api_versions" lockData then lockData.api_versions else [ ];
       androidSdkConfig = {
-        platformVersions = unique deviceApis;
+        platformVersions = unique (map toString deviceApis);
         buildToolsVersion = getVar "ANDROID_BUILD_TOOLS_VERSION";
         cmdLineToolsVersion = getVar "ANDROID_CMDLINE_TOOLS_VERSION";
         systemImageTypes = [ (getVar "ANDROID_SYSTEM_IMAGE_TAG") ];
+        ndkVersion = getVar "ANDROID_NDK_VERSION";
+        cmakeVersions =
+          let
+            list =
+              if builtins.hasAttr "ANDROID_CMAKE_VERSIONS" defaultsData then defaultsData.ANDROID_CMAKE_VERSIONS else [ ];
+            single =
+              if builtins.hasAttr "ANDROID_CMAKE_VERSION" defaultsData then defaultsData.ANDROID_CMAKE_VERSION else "";
+          in
+          if list != [ ] then list else (if single != "" then [ single ] else [ ]);
       };
 
       forAllSystems =
@@ -100,7 +79,10 @@
               cmdLineToolsVersion = config.cmdLineToolsVersion;
               includeEmulator = true;
               includeSystemImages = true;
-              includeNDK = false;
+              includeNDK = config.ndkVersion != "";
+              ndkVersions = if config.ndkVersion != "" then [ config.ndkVersion ] else [ ];
+              includeCmake = config.cmakeVersions != [ ];
+              cmakeVersions = config.cmakeVersions;
               abiVersions = abiVersions;
               systemImageTypes = config.systemImageTypes;
             };

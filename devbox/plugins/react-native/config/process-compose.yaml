@@ -1,0 +1,10 @@
+version: "0.5"
+
+processes:
+  rn-metro:
+    command: "bash -lc 'cd \"{{ .DevboxDirRoot }}/..\" && npx react-native start'"
+    availability:
+      restart: "on_failure"
+    shutdown:
+      signal: 15
+      timeout: 20

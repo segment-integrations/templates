@@ -36,6 +36,7 @@ config_dir="${ANDROID_CONFIG_DIR:-./devbox.d/android}"
 config_path="${config_dir%/}/android.json"
 devices_dir="${ANDROID_DEVICES_DIR:-${config_dir%/}/devices}"
 scripts_dir="${ANDROID_SCRIPTS_DIR:-${config_dir%/}/scripts}"
+lock_path="${config_dir%/}/devices.lock.json"
 allowed_tags="default google_apis google_apis_playstore play_store aosp_atd google_atd"
 allowed_abis="arm64-v8a x86_64 x86"
 
@@ -207,15 +208,74 @@ case "$command_name" in
   select)
     [ "${1-}" != "" ] || usage
     "${scripts_dir%/}/select-device.sh" "$@"
+    "$0" eval >/dev/null
     ;;
   reset)
     tmp="${config_path}.tmp"
     jq '.EVALUATE_DEVICES = []' "$config_path" >"$tmp"
     mv "$tmp" "$config_path"
     echo "Selected Android devices: all"
+    "$0" eval >/dev/null
     ;;
   eval)
-    jq -r '.EVALUATE_DEVICES | if . == [] then "all" else join(",") end' "$config_path"
+    if [ ! -d "$devices_dir" ]; then
+      echo "Devices directory not found: $devices_dir" >&2
+      exit 1
+    fi
+    files="$(ls "$devices_dir"/*.json 2>/dev/null || true)"
+    if [ -z "$files" ]; then
+      echo "No device definitions found in ${devices_dir}." >&2
+      exit 1
+    fi
+
+    devices_json="$(
+      for file in $files; do
+        jq -c --arg path "$file" '{file:$path, name:(.name // ""), api:(.api // null)}' "$file"
+      done | jq -s '.'
+    )"
+    selected_list="$(jq -r '.EVALUATE_DEVICES[]?' "$config_path")"
+    extra_platforms="$(jq -r '.ANDROID_PLATFORM_VERSIONS[]?' "$config_path")"
+
+    api_values=""
+    if [ -n "$selected_list" ]; then
+      while read -r sel; do
+        [ -n "$sel" ] || continue
+        match="$(printf '%s\n' "$devices_json" | jq -r --arg sel "$sel" '
+          .[] | select((.file | sub("^.*/"; "") | sub("\\.json$"; "")) == $sel or .name == $sel) | .file' | head -n1)"
+        if [ -z "$match" ]; then
+          echo "EVALUATE_DEVICES '${sel}' not found in devbox.d/android/devices." >&2
+          exit 1
+        fi
+        api="$(printf '%s\n' "$devices_json" | jq -r --arg file "$match" '.[] | select(.file == $file) | .api' | head -n1)"
+        if [ -n "$api" ] && [ "$api" != "null" ]; then
+          api_values="${api_values}${api_values:+
+}${api}"
+        fi
+      done <<EOF
+$selected_list
+EOF
+    else
+      api_values="$(printf '%s\n' "$devices_json" | jq -r '.[] | .api' | awk 'NF')"
+    fi
+
+    if [ -n "$extra_platforms" ]; then
+      while read -r extra; do
+        [ -n "$extra" ] || continue
+        api_values="${api_values}${api_values:+
+}${extra}"
+      done <<EOF
+$extra_platforms
+EOF
+    fi
+
+    if [ -z "$api_values" ]; then
+      echo "No device APIs found in ${devices_dir}." >&2
+      exit 1
+    fi
+    temp_lock="${lock_path}.tmp"
+    printf '%s\n' "$api_values" | awk 'NF' | sort -u | jq -R -s '{api_versions: (split("\n") | map(select(length>0)) | map(tonumber))}' >"$temp_lock"
+    mv "$temp_lock" "$lock_path"
+    jq -r '.api_versions | join(",")' "$lock_path"
     ;;
   *)
     usage
