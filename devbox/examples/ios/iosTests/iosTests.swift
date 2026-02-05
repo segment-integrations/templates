@@ -18,18 +18,41 @@ final class iosTests: XCTestCase {
         // Put teardown code here. This method is called after the invocation of each test method in the class.
     }
 
-    func testExample() throws {
-        // This is an example of a functional test case.
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
-        // Any test you write for XCTest can be annotated as throws and async.
-        // Mark your test throws to produce an unexpected failure when your test encounters an uncaught error.
-        // Mark your test async to allow awaiting for asynchronous code to complete. Check the results with assertions afterwards.
+    func testMathOperations() throws {
+        // Test basic math operations
+        XCTAssertEqual(2 + 2, 4)
+        XCTAssertEqual(10 / 2, 5)
+        XCTAssertEqual(5 * 2, 10)
+    }
+
+    func testStringOperations() throws {
+        // Test string operations
+        let hello = "Hello"
+        let world = "World"
+        XCTAssertEqual("\(hello) \(world)", "Hello World")
+        XCTAssertTrue(hello.starts(with: "H"))
+    }
+
+    func testArrayOperations() throws {
+        // Test array operations
+        var numbers = [1, 2, 3, 4, 5]
+        numbers.append(6)
+        XCTAssertEqual(numbers.count, 6)
+        XCTAssertEqual(numbers.last, 6)
+        XCTAssertEqual(numbers.first, 1)
+    }
+
+    func testContentViewExists() throws {
+        // Test that ContentView can be instantiated
+        let view = ContentView()
+        XCTAssertNotNil(view)
     }
 
     func testPerformanceExample() throws {
         // This is an example of a performance test case.
         self.measure {
             // Put the code you want to measure the time of here.
+            let _ = (0..<1000).map { $0 * 2 }
         }
     }
 

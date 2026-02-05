@@ -45,6 +45,16 @@
       ". {{ .Virtenv }}/scripts/env.sh"
     ],
     "scripts": {
+      "build-android": [
+        "gradle assembleDebug"
+      ],
+      "test-android": [
+        "gradle test"
+      ],
+      "test-android-e2e": [
+        "devbox services start android-emulator || devbox services up -b android-emulator",
+        "gradle connectedAndroidTest"
+      ],
       "start-android": [
         ". {{ .Virtenv }}/scripts/avd.sh",
         "android_run_app \"${1-}\""

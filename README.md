@@ -32,5 +32,22 @@ See `devbox/plugins/ios/REFERENCE.md` for the full iOS reference.
 - iOS: `devbox run --pure start-sim`, `devbox run --pure stop-sim`.
 See `devbox/plugins/react-native/REFERENCE.md` for the full React Native reference.
 
-## CI quickstart
-GitHub Actions workflows live in `.github/workflows/` and exercise emulator/simulator start/stop with `--pure`.
+## CI/CD
+
+Comprehensive GitHub Actions workflows are configured for testing:
+
+### Fast PR Checks (`pr-checks.yml`)
+Runs automatically on every PR with quick validation:
+- Plugin validation and unit tests
+- Quick smoke tests on default devices
+- ~15-30 minutes total
+
+### Full E2E Tests (`e2e-full.yml`)
+Manually triggered or scheduled weekly to test:
+- **Android**: API 21 (min) to API 36 (max)
+- **iOS**: iOS 15.4 (min) to iOS 26.2 (max)
+- **React Native**: Full cross-platform testing
+- Matrix execution for parallel testing
+- ~45-60 minutes per platform
+
+See [.github/workflows/README.md](.github/workflows/README.md) for detailed documentation.

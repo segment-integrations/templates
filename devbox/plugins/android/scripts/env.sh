@@ -274,8 +274,13 @@ if [ -z "${ANDROID_SDK_ROOT:-}" ]; then
 fi
 
 if [ -z "${ANDROID_SDK_ROOT:-}" ]; then
-  echo "ANDROID_SDK_ROOT/ANDROID_HOME must be set. Enable the Devbox Android SDK package or set ANDROID_SDK_ROOT explicitly." >&2
-  exit 1
+  if [ "${ANDROID_SDK_REQUIRED:-1}" = "1" ]; then
+    echo "ANDROID_SDK_ROOT/ANDROID_HOME must be set. Enable the Devbox Android SDK package or set ANDROID_SDK_ROOT explicitly." >&2
+    exit 1
+  else
+    # SDK not required for this task (e.g., unit tests)
+    return 0 2>/dev/null || exit 0
+  fi
 fi
 
 ANDROID_HOME="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"

@@ -1,0 +1,381 @@
+name: Full E2E Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_android:
+        description: 'Run Android tests'
+        type: boolean
+        default: true
+      run_ios:
+        description: 'Run iOS tests'
+        type: boolean
+        default: true
+      run_react_native:
+        description: 'Run React Native tests'
+        type: boolean
+        default: true
+  schedule:
+    # Run weekly on Monday at 00:00 UTC
+    - cron: '0 0 * * 1'
+
+jobs:
+  android-e2e:
+    name: Android E2E - ${{ matrix.device }} (API ${{ matrix.api }})
+    if: ${{ github.event_name == 'schedule' || inputs.run_android }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - device: min
+            api: 21
+            description: "Minimum supported (Android 5.0)"
+          - device: max
+            api: 36
+            description: "Maximum tested (Android 15)"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Setup Gradle cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Install Devbox
+        uses: jetify-com/devbox-install-action@v0.14.0
+        with:
+          enable-cache: true
+
+      - name: Start Android emulator (${{ matrix.description }})
+        working-directory: devbox/examples/android
+        run: |
+          echo "Starting emulator with device: ${{ matrix.device }}"
+          EMU_HEADLESS=1 devbox run --pure start-emu ${{ matrix.device }} &
+          EMU_PID=$!
+          echo "EMU_PID=$EMU_PID" >> $GITHUB_ENV
+
+          # Wait for emulator to fully boot
+          echo "Waiting for emulator to boot..."
+          sleep 90
+
+      - name: Verify emulator is running
+        working-directory: devbox/examples/android
+        run: |
+          echo "Checking emulator status..."
+          devbox run --pure android.sh info
+
+      - name: Build app
+        working-directory: devbox/examples/android
+        run: |
+          echo "Building Android app..."
+          devbox run --pure build-android
+
+      - name: Run Android e2e tests
+        working-directory: devbox/examples/android
+        run: |
+          echo "Running Android instrumented tests..."
+          devbox run --pure test-android-e2e
+
+      - name: Cleanup
+        if: always()
+        run: |
+          echo "Cleaning up emulator..."
+          kill $EMU_PID 2>/dev/null || true
+          wait $EMU_PID 2>/dev/null || true
+
+      - name: Upload logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-${{ matrix.device }}-logs
+          path: |
+            devbox/examples/android/app/build/outputs/
+            devbox/examples/android/build/
+          retention-days: 7
+
+  ios-e2e:
+    name: iOS E2E - ${{ matrix.device }} (iOS ${{ matrix.ios_version }})
+    if: ${{ github.event_name == 'schedule' || inputs.run_ios }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - device: min
+            ios_version: "15.4"
+            os: macos-14
+            description: "Minimum supported (iOS 15.4)"
+          - device: max
+            ios_version: "26.2"
+            os: macos-15
+            description: "Maximum tested (iOS 26.2)"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup CocoaPods cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cocoapods/repos
+            ~/Library/Caches/CocoaPods
+          key: ${{ runner.os }}-pods-${{ hashFiles('**/Podfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pods-
+
+      - name: Setup iOS build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Developer/Xcode/DerivedData
+          key: ${{ runner.os }}-xcode-${{ hashFiles('**/*.xcodeproj/**', '**/*.xcworkspace/**') }}
+          restore-keys: |
+            ${{ runner.os }}-xcode-
+
+      - name: Install Devbox
+        uses: jetify-com/devbox-install-action@v0.14.0
+        with:
+          enable-cache: true
+
+      - name: Start iOS simulator (${{ matrix.description }})
+        working-directory: devbox/examples/ios
+        run: |
+          echo "Starting simulator with device: ${{ matrix.device }}"
+          SIM_HEADLESS=1 devbox run --pure start-sim ${{ matrix.device }} &
+          SIM_PID=$!
+          echo "SIM_PID=$SIM_PID" >> $GITHUB_ENV
+
+          # Wait for simulator to fully boot
+          echo "Waiting for simulator to boot..."
+          sleep 50
+
+      - name: Verify simulator is running
+        working-directory: devbox/examples/ios
+        run: |
+          echo "Checking simulator status..."
+          devbox run --pure ios.sh info
+
+      - name: Build app
+        working-directory: devbox/examples/ios
+        run: |
+          echo "Building iOS app..."
+          devbox run --pure build-ios
+
+      - name: Run iOS e2e tests
+        working-directory: devbox/examples/ios
+        run: |
+          echo "Running iOS UI tests..."
+          devbox run --pure test-ios-e2e
+
+      - name: Cleanup
+        if: always()
+        working-directory: devbox/examples/ios
+        run: |
+          echo "Cleaning up simulator..."
+          devbox run --pure stop-sim || true
+          wait $SIM_PID 2>/dev/null || true
+
+      - name: Upload logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-${{ matrix.device }}-logs
+          path: |
+            ~/Library/Logs/CoreSimulator/
+          retention-days: 7
+
+  react-native-e2e:
+    name: React Native E2E - ${{ matrix.platform }} ${{ matrix.device }}
+    if: ${{ github.event_name == 'schedule' || inputs.run_react_native }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Android tests
+          - platform: android
+            device: min
+            api: 21
+            os: ubuntu-24.04
+            description: "Android min (API 21)"
+          - platform: android
+            device: max
+            api: 36
+            os: ubuntu-24.04
+            description: "Android max (API 36)"
+          # iOS tests
+          - platform: ios
+            device: min
+            ios_version: "15.4"
+            os: macos-14
+            description: "iOS min (15.4)"
+          - platform: ios
+            device: max
+            ios_version: "26.2"
+            os: macos-15
+            description: "iOS max (26.2)"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable KVM (Android only)
+        if: matrix.platform == 'android'
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Setup Node.js with cache
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: devbox/examples/react-native/package-lock.json
+
+      - name: Setup Gradle cache (Android only)
+        if: matrix.platform == 'android'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Setup CocoaPods cache (iOS only)
+        if: matrix.platform == 'ios'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cocoapods/repos
+            ~/Library/Caches/CocoaPods
+          key: ${{ runner.os }}-pods-${{ hashFiles('**/Podfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pods-
+
+      - name: Setup iOS build cache (iOS only)
+        if: matrix.platform == 'ios'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Developer/Xcode/DerivedData
+          key: ${{ runner.os }}-xcode-${{ hashFiles('**/*.xcodeproj/**', '**/*.xcworkspace/**') }}
+          restore-keys: |
+            ${{ runner.os }}-xcode-
+
+      - name: Install Devbox
+        uses: jetify-com/devbox-install-action@v0.14.0
+        with:
+          enable-cache: true
+
+      - name: Install Node dependencies
+        working-directory: devbox/examples/react-native
+        run: npm install
+
+      - name: Start Android emulator
+        if: matrix.platform == 'android'
+        working-directory: devbox/examples/react-native
+        run: |
+          echo "Starting Android emulator: ${{ matrix.description }}"
+          EMU_HEADLESS=1 devbox run --pure start-emu ${{ matrix.device }} &
+          EMU_PID=$!
+          echo "EMU_PID=$EMU_PID" >> $GITHUB_ENV
+          sleep 90
+
+      - name: Start iOS simulator
+        if: matrix.platform == 'ios'
+        working-directory: devbox/examples/react-native
+        run: |
+          echo "Starting iOS simulator: ${{ matrix.description }}"
+          SIM_HEADLESS=1 devbox run --pure start-sim ${{ matrix.device }} &
+          SIM_PID=$!
+          echo "SIM_PID=$SIM_PID" >> $GITHUB_ENV
+          sleep 50
+
+      - name: Verify device is running
+        working-directory: devbox/examples/react-native
+        run: |
+          if [[ "${{ matrix.platform }}" == "android" ]]; then
+            devbox run --pure android.sh info
+          else
+            devbox run --pure ios.sh info
+          fi
+
+      - name: Build React Native app
+        working-directory: devbox/examples/react-native
+        run: |
+          echo "Building React Native app for ${{ matrix.platform }}..."
+          if [[ "${{ matrix.platform }}" == "android" ]]; then
+            devbox run --pure build-android
+          else
+            devbox run --pure build-ios
+          fi
+
+      - name: Run React Native e2e tests
+        working-directory: devbox/examples/react-native
+        run: |
+          echo "Running e2e tests for ${{ matrix.platform }}..."
+          if [[ "${{ matrix.platform }}" == "android" ]]; then
+            devbox run --pure test-android-e2e
+          else
+            devbox run --pure test-ios-e2e
+          fi
+
+      - name: Cleanup Android
+        if: always() && matrix.platform == 'android'
+        run: |
+          kill $EMU_PID 2>/dev/null || true
+          wait $EMU_PID 2>/dev/null || true
+
+      - name: Cleanup iOS
+        if: always() && matrix.platform == 'ios'
+        working-directory: devbox/examples/react-native
+        run: |
+          devbox run --pure stop-sim || true
+          wait $SIM_PID 2>/dev/null || true
+
+      - name: Upload logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: react-native-${{ matrix.platform }}-${{ matrix.device }}-logs
+          path: |
+            devbox/examples/react-native/android/app/build/outputs/
+            devbox/examples/react-native/ios/build/
+            ~/Library/Logs/CoreSimulator/
+          retention-days: 7
+
+  e2e-summary:
+    name: E2E Test Summary
+    runs-on: ubuntu-latest
+    needs: [android-e2e, ios-e2e, react-native-e2e]
+    if: always()
+    steps:
+      - name: Check results
+        run: |
+          echo "Android E2E: ${{ needs.android-e2e.result }}"
+          echo "iOS E2E: ${{ needs.ios-e2e.result }}"
+          echo "React Native E2E: ${{ needs.react-native-e2e.result }}"
+
+          if [[ "${{ needs.android-e2e.result }}" != "success" ]] || \
+             [[ "${{ needs.ios-e2e.result }}" != "success" ]] || \
+             [[ "${{ needs.react-native-e2e.result }}" != "success" ]]; then
+            echo "::error::One or more E2E test suites failed"
+            exit 1
+          fi
+
+          echo "::notice::All E2E tests passed successfully!"

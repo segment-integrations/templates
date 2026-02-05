@@ -21,6 +21,41 @@
       ". {{ .Virtenv }}/scripts/env.sh"
     ],
     "scripts": {
+      "build-node": [
+        "npm install"
+      ],
+      "test": [
+        "ANDROID_SDK_REQUIRED=0 npm test"
+      ],
+      "test-unit": [
+        "ANDROID_SDK_REQUIRED=0 npm test"
+      ],
+      "build-android": [
+        "devbox run --pure build-node",
+        "cd android && gradle assembleDebug"
+      ],
+      "build-ios": [
+        "devbox run --pure build-node",
+        "cd ios && env -u LD -u LDFLAGS -u NIX_LDFLAGS -u NIX_CFLAGS_COMPILE -u NIX_CFLAGS_LINK xcodebuild -project ${IOS_APP_PROJECT:-*.xcodeproj} -scheme ${IOS_APP_SCHEME:-$(basename ${IOS_APP_PROJECT:-*.xcodeproj} .xcodeproj)} -configuration Debug -destination 'generic/platform=iOS Simulator' -derivedDataPath ../.devbox/virtenv/ios/DerivedData build"
+      ],
+      "test-android": [
+        "devbox run --pure build-node",
+        "cd android && gradle test"
+      ],
+      "test-android-e2e": [
+        "devbox run --pure build-node",
+        "devbox services start android-emulator || devbox services up -b android-emulator",
+        "cd android && gradle connectedAndroidTest"
+      ],
+      "test-ios": [
+        "devbox run --pure build-node",
+        "cd ios && env -u LD -u LDFLAGS -u NIX_LDFLAGS -u NIX_CFLAGS_COMPILE -u NIX_CFLAGS_LINK xcodebuild -project ${IOS_APP_PROJECT:-*.xcodeproj} -scheme ${IOS_APP_SCHEME:-$(basename ${IOS_APP_PROJECT:-*.xcodeproj} .xcodeproj)} -configuration Debug -destination 'generic/platform=iOS Simulator' -derivedDataPath ../.devbox/virtenv/ios/DerivedData test"
+      ],
+      "test-ios-e2e": [
+        "devbox run --pure build-node",
+        "devbox services start ios-simulator || devbox services up -b ios-simulator",
+        "cd ios && env -u LD -u LDFLAGS -u NIX_LDFLAGS -u NIX_CFLAGS_COMPILE -u NIX_CFLAGS_LINK xcodebuild -project ${IOS_APP_PROJECT:-*.xcodeproj} -scheme ${IOS_APP_SCHEME:-$(basename ${IOS_APP_PROJECT:-*.xcodeproj} .xcodeproj)} -configuration Debug -destination 'platform=iOS Simulator,name=${IOS_SIM_NAME:-iPhone 15}' -derivedDataPath ../.devbox/virtenv/ios/DerivedData test"
+      ],
       "start-android": [
         "devbox services start rn-metro || devbox services up -b rn-metro",
         "npx react-native run-android --no-packager"

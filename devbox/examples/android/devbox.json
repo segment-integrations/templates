@@ -5,7 +5,6 @@
   },
   "shell": {
     "scripts": {
-      "build-android": "gradle assembleDebug",
       "build": "devbox run --pure build-android"
     }
   }

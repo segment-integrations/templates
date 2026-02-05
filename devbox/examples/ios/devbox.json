@@ -1,8 +1,11 @@
 {
   "include": ["path:../../plugins/ios/plugin.json"],
+  "env": {
+    "IOS_APP_PROJECT": "ios.xcodeproj",
+    "IOS_APP_SCHEME": "ios"
+  },
   "shell": {
     "scripts": {
-      "build-ios": "env -u LD -u LDFLAGS -u NIX_LDFLAGS -u NIX_CFLAGS_COMPILE -u NIX_CFLAGS_LINK xcodebuild -project ios.xcodeproj -scheme ios -configuration Debug -destination 'generic/platform=iOS Simulator' -derivedDataPath .devbox/virtenv/ios/DerivedData build",
       "build": "devbox run --pure build-ios"
     }
   },

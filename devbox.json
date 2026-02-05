@@ -1,5 +1,6 @@
 {
   "packages": {
-    "process-compose": "latest"
+    "process-compose": "latest",
+    "act": "latest"
   }
 }

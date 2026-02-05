@@ -38,6 +38,16 @@
       ". {{ .Virtenv }}/scripts/env.sh"
     ],
     "scripts": {
+      "build-ios": [
+        "env -u LD -u LDFLAGS -u NIX_LDFLAGS -u NIX_CFLAGS_COMPILE -u NIX_CFLAGS_LINK xcodebuild -project ${IOS_APP_PROJECT:-*.xcodeproj} -scheme ${IOS_APP_SCHEME:-$(basename ${IOS_APP_PROJECT:-*.xcodeproj} .xcodeproj)} -configuration Debug -destination 'generic/platform=iOS Simulator' -derivedDataPath ${IOS_APP_DERIVED_DATA:-.devbox/virtenv/ios/DerivedData} build"
+      ],
+      "test-ios": [
+        "env -u LD -u LDFLAGS -u NIX_LDFLAGS -u NIX_CFLAGS_COMPILE -u NIX_CFLAGS_LINK xcodebuild -project ${IOS_APP_PROJECT:-*.xcodeproj} -scheme ${IOS_APP_SCHEME:-$(basename ${IOS_APP_PROJECT:-*.xcodeproj} .xcodeproj)} -configuration Debug -destination 'generic/platform=iOS Simulator' -derivedDataPath ${IOS_APP_DERIVED_DATA:-.devbox/virtenv/ios/DerivedData} test"
+      ],
+      "test-ios-e2e": [
+        "devbox services start ios-simulator || devbox services up -b ios-simulator",
+        "env -u LD -u LDFLAGS -u NIX_LDFLAGS -u NIX_CFLAGS_COMPILE -u NIX_CFLAGS_LINK xcodebuild -project ${IOS_APP_PROJECT:-*.xcodeproj} -scheme ${IOS_APP_SCHEME:-$(basename ${IOS_APP_PROJECT:-*.xcodeproj} .xcodeproj)} -configuration Debug -destination 'platform=iOS Simulator,name=${IOS_SIM_NAME:-iPhone 15}' -derivedDataPath ${IOS_APP_DERIVED_DATA:-.devbox/virtenv/ios/DerivedData} test"
+      ],
       "start-ios": [
         ". {{ .Virtenv }}/scripts/simctl.sh",
         "ios_run_app \"${1-}\""

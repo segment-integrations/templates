@@ -1,0 +1,275 @@
+name: PR Fast Checks
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android-plugin-tests:
+    name: Android Plugin Tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Setup Gradle cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Install Devbox
+        uses: jetify-com/devbox-install-action@v0.14.0
+        with:
+          enable-cache: true
+
+      - name: Run Android validation tests
+        run: bash devbox/plugins/tests/android/test-validation.sh
+
+      - name: Run Android device management tests
+        run: bash devbox/plugins/tests/android/test-device-mgmt.sh
+
+  ios-plugin-tests:
+    name: iOS Plugin Tests
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup CocoaPods cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cocoapods/repos
+            ~/Library/Caches/CocoaPods
+          key: ${{ runner.os }}-pods-${{ hashFiles('**/Podfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pods-
+
+      - name: Setup iOS build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Developer/Xcode/DerivedData
+          key: ${{ runner.os }}-xcode-${{ hashFiles('**/*.xcodeproj/**', '**/*.xcworkspace/**') }}
+          restore-keys: |
+            ${{ runner.os }}-xcode-
+
+      - name: Install Devbox
+        uses: jetify-com/devbox-install-action@v0.14.0
+        with:
+          enable-cache: true
+
+      - name: Run iOS device management tests
+        run: bash devbox/plugins/tests/ios/test-device-mgmt.sh
+
+      - name: Run iOS cache tests
+        run: bash devbox/plugins/tests/ios/test-cache.sh
+
+  android-quick-smoke:
+    name: Android Quick Smoke Test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Setup Gradle cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Install Devbox
+        uses: jetify-com/devbox-install-action@v0.14.0
+        with:
+          enable-cache: true
+
+      - name: Test Android emulator lifecycle (default device)
+        working-directory: devbox/examples/android
+        run: |
+          # Start emulator in headless mode with KVM acceleration
+          EMU_HEADLESS=1 devbox run --pure start-emu &
+          EMU_PID=$!
+
+          # Wait for emulator to boot
+          sleep 60
+
+          # Verify emulator is running
+          devbox run --pure android.sh info
+
+          # Clean stop
+          kill $EMU_PID 2>/dev/null || true
+          wait $EMU_PID 2>/dev/null || true
+
+  ios-quick-smoke:
+    name: iOS Quick Smoke Test
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup CocoaPods cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cocoapods/repos
+            ~/Library/Caches/CocoaPods
+          key: ${{ runner.os }}-pods-${{ hashFiles('**/Podfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pods-
+
+      - name: Setup iOS build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Developer/Xcode/DerivedData
+          key: ${{ runner.os }}-xcode-${{ hashFiles('**/*.xcodeproj/**', '**/*.xcworkspace/**') }}
+          restore-keys: |
+            ${{ runner.os }}-xcode-
+
+      - name: Install Devbox
+        uses: jetify-com/devbox-install-action@v0.14.0
+        with:
+          enable-cache: true
+
+      - name: Test iOS simulator lifecycle (default device)
+        working-directory: devbox/examples/ios
+        run: |
+          # Start simulator in headless mode
+          SIM_HEADLESS=1 devbox run --pure start-sim &
+          SIM_PID=$!
+
+          # Wait for simulator to boot
+          sleep 40
+
+          # Verify simulator is running
+          devbox run --pure ios.sh info
+
+          # Stop simulator
+          devbox run --pure stop-sim
+
+          wait $SIM_PID 2>/dev/null || true
+
+  android-unit-tests:
+    name: Android Unit Tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Gradle cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Install Devbox
+        uses: jetify-com/devbox-install-action@v0.14.0
+        with:
+          enable-cache: true
+
+      - name: Run Android unit tests
+        working-directory: devbox/examples/android
+        run: devbox run --pure test-android
+
+  ios-unit-tests:
+    name: iOS Unit Tests
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup iOS build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Developer/Xcode/DerivedData
+          key: ${{ runner.os }}-xcode-${{ hashFiles('**/*.xcodeproj/**', '**/*.xcworkspace/**') }}
+          restore-keys: |
+            ${{ runner.os }}-xcode-
+
+      - name: Install Devbox
+        uses: jetify-com/devbox-install-action@v0.14.0
+        with:
+          enable-cache: true
+
+      - name: Run iOS unit tests
+        working-directory: devbox/examples/ios
+        run: devbox run --pure test-ios
+
+  react-native-unit-tests:
+    name: React Native Unit Tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js with cache
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: devbox/examples/react-native/package-lock.json
+
+      - name: Install Devbox
+        uses: jetify-com/devbox-install-action@v0.14.0
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        working-directory: devbox/examples/react-native
+        run: devbox run --pure build-node
+
+      - name: Run Jest tests
+        working-directory: devbox/examples/react-native
+        run: npm test -- --coverage
+
+  status-check:
+    name: All PR Checks Passed
+    runs-on: ubuntu-latest
+    needs: [android-plugin-tests, ios-plugin-tests, android-quick-smoke, ios-quick-smoke, android-unit-tests, ios-unit-tests, react-native-unit-tests]
+    if: always()
+    steps:
+      - name: Check job results
+        run: |
+          if [[ "${{ needs.android-plugin-tests.result }}" != "success" ]] || \
+             [[ "${{ needs.ios-plugin-tests.result }}" != "success" ]] || \
+             [[ "${{ needs.android-quick-smoke.result }}" != "success" ]] || \
+             [[ "${{ needs.ios-quick-smoke.result }}" != "success" ]] || \
+             [[ "${{ needs.android-unit-tests.result }}" != "success" ]] || \
+             [[ "${{ needs.ios-unit-tests.result }}" != "success" ]] || \
+             [[ "${{ needs.react-native-unit-tests.result }}" != "success" ]]; then
+            echo "One or more checks failed"
+            exit 1
+          fi
+          echo "All checks passed!"
