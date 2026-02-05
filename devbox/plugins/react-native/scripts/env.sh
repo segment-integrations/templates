@@ -1,7 +1,11 @@
 #!/usr/bin/env sh
+# React Native Plugin - Environment Setup
+# See REFERENCE.md for detailed documentation
+
+set -eu
 
 if ! (return 0 2>/dev/null); then
-  echo "devbox.d/react-native/scripts/env.sh must be sourced." >&2
+  echo "ERROR: env.sh must be sourced" >&2
   exit 1
 fi
 
@@ -11,30 +15,27 @@ fi
 REACT_NATIVE_ENV_LOADED=1
 REACT_NATIVE_ENV_LOADED_PID="$$"
 
+# Source lib.sh
+script_dir="$(cd "$(dirname "$0")" && pwd)"
+if [ -n "${REACT_NATIVE_SCRIPTS_DIR:-}" ] && [ -d "${REACT_NATIVE_SCRIPTS_DIR}" ]; then
+  script_dir="${REACT_NATIVE_SCRIPTS_DIR}"
+fi
+
+# shellcheck disable=SC1090
+. "$script_dir/lib.sh"
+
+# Load React Native configuration
 load_react_native_config() {
   config_path="${REACT_NATIVE_PLUGIN_CONFIG:-}"
   if [ -z "$config_path" ]; then
-    if [ -n "${REACT_NATIVE_CONFIG_DIR:-}" ] && [ -f "${REACT_NATIVE_CONFIG_DIR}/react-native.json" ]; then
-      config_path="${REACT_NATIVE_CONFIG_DIR}/react-native.json"
-    elif [ -n "${DEVBOX_PROJECT_ROOT:-}" ] && [ -f "${DEVBOX_PROJECT_ROOT}/devbox.d/react-native/react-native.json" ]; then
-      config_path="${DEVBOX_PROJECT_ROOT}/devbox.d/react-native/react-native.json"
-    elif [ -n "${DEVBOX_PROJECT_DIR:-}" ] && [ -f "${DEVBOX_PROJECT_DIR}/devbox.d/react-native/react-native.json" ]; then
-      config_path="${DEVBOX_PROJECT_DIR}/devbox.d/react-native/react-native.json"
-    elif [ -n "${DEVBOX_WD:-}" ] && [ -f "${DEVBOX_WD}/devbox.d/react-native/react-native.json" ]; then
-      config_path="${DEVBOX_WD}/devbox.d/react-native/react-native.json"
-    else
-      config_path="./devbox.d/react-native/react-native.json"
-    fi
+    config_path="$(react_native_config_path 2>/dev/null || echo "")"
   fi
 
-  if [ ! -f "$config_path" ]; then
+  if [ -z "$config_path" ] || [ ! -f "$config_path" ]; then
     return 0
   fi
 
-  if ! command -v jq >/dev/null 2>&1; then
-    echo "jq is required to read ${config_path}. Ensure the Devbox React Native plugin packages are installed." >&2
-    exit 1
-  fi
+  react_native_require_jq
 
   tab="$(printf '\t')"
   while IFS="$tab" read -r key value; do
@@ -53,3 +54,5 @@ EOF
 }
 
 load_react_native_config
+
+react_native_debug_log "env.sh loaded"

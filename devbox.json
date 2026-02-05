@@ -35,6 +35,13 @@
         "devbox run lint-ios",
         "devbox run test-ios-lib"
       ],
+      "lint-react-native": [
+        "echo 'Running shellcheck on React Native plugin scripts...'",
+        "shellcheck -S warning devbox/plugins/react-native/scripts/*.sh"
+      ],
+      "test-react-native": [
+        "devbox run lint-react-native"
+      ],
       "lint-all": [
         "echo 'Running shellcheck on all plugins...'",
         "shellcheck -S warning devbox/plugins/*/scripts/*.sh"
@@ -57,16 +64,19 @@
         "echo 'Running all tests and checks...'",
         "echo '========================================='",
         "echo ''",
-        "echo '1/5 Linting all plugin scripts...'",
+        "echo '1/6 Linting all plugin scripts...'",
         "devbox run lint-all",
         "echo ''",
-        "echo '2/5 Testing Android plugin...'",
+        "echo '2/6 Testing Android plugin...'",
         "devbox run test-android",
         "echo ''",
-        "echo '3/5 Testing iOS plugin...'",
+        "echo '3/6 Testing iOS plugin...'",
         "devbox run test-ios",
         "echo ''",
-        "echo '4/5 Validating GitHub workflows...'",
+        "echo '4/6 Testing React Native plugin...'",
+        "devbox run test-react-native",
+        "echo ''",
+        "echo '5/6 Validating GitHub workflows...'",
         "devbox run check-workflows",
         "echo ''",
         "echo '========================================='",
@@ -77,6 +87,7 @@
         "echo '  - Shellcheck: all plugin scripts'",
         "echo '  - Android: lib.sh + devices.sh tests'",
         "echo '  - iOS: lib.sh tests'",
+        "echo '  - React Native: lint checks'",
         "echo '  - GitHub Actions: workflow syntax validation'"
       ]
     }

@@ -32,6 +32,6 @@ runs:
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       run: |
-        # Select specific device to minimize SDK download
-        # (devices.sh uses nix-shell for jq if not installed)
+        # Select specific device to minimize SDK download and generate lock file
+        # This updates devices.lock.json with only the selected device(s)
         bash ../../plugins/android/scripts/devices.sh select ${{ inputs.device }}

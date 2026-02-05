@@ -1,5 +1,10 @@
 {
-  "devices": [],
+  "devices": [
+    {
+      "name": "iPhone 17",
+      "runtime": "26.2"
+    }
+  ],
   "checksum": "",
-  "generated_at": ""
+  "generated_at": "2026-02-05T00:00:00Z"
 }

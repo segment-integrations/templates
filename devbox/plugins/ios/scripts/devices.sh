@@ -146,48 +146,105 @@ case "$command_name" in
     rm -f "$file"
     ;;
   select)
-    # Inline select-device.sh functionality
+    # Select specific devices and update lock file directly
     [ "${1-}" != "" ] || usage
-    if [ ! -f "$config_path" ]; then
-      echo "iOS config not found: $config_path" >&2
+    if [ ! -d "$devices_dir" ]; then
+      echo "ERROR: Devices directory not found: $devices_dir" >&2
       exit 1
     fi
-    tmp="${config_path}.tmp"
-    jq --argjson selections "$(printf '%s\n' "$@" | jq -R . | jq -s .)" '.EVALUATE_DEVICES = $selections' "$config_path" >"$tmp"
-    mv "$tmp" "$config_path"
-    echo "Selected iOS devices: $*"
-    ;;
-  reset)
-    tmp="${config_path}.tmp"
-    jq '.EVALUATE_DEVICES = []' "$config_path" >"$tmp"
-    mv "$tmp" "$config_path"
-    echo "Selected iOS devices: all"
-    ;;
-  eval)
-    # Get selected devices
-    selected=$(jq -r '.EVALUATE_DEVICES // []' "$config_path")
+
+    # Build JSON array from selected device files
+    devices_json="["
+    first=true
+    for selected_name in "$@"; do
+      # Try filename match first
+      device_file="${devices_dir}/${selected_name}.json"
+      if [ ! -f "$device_file" ]; then
+        # Try name field match
+        device_file=""
+        for file in "$devices_dir"/*.json; do
+          [ -f "$file" ] || continue
+          name="$(jq -r '.name // empty' "$file")"
+          if [ "$name" = "$selected_name" ]; then
+            device_file="$file"
+            break
+          fi
+        done
+      fi
+
+      if [ -z "$device_file" ] || [ ! -f "$device_file" ]; then
+        echo "ERROR: Device '$selected_name' not found in ${devices_dir}" >&2
+        exit 1
+      fi
+
+      if [ "$first" = true ]; then
+        first=false
+      else
+        devices_json="${devices_json},"
+      fi
+      devices_json="${devices_json}$(cat "$device_file")"
+    done
+    devices_json="${devices_json}]"
+
+    # Compute checksum
+    checksum="$(ios_compute_devices_checksum "$devices_dir" 2>/dev/null || echo "")"
 
     # Generate lock file
     config_dir="$(dirname "$config_path")"
     lock_path="${config_dir%/}/devices.lock.json"
+    temp_lock="${lock_path}.tmp"
+
+    echo "$devices_json" | jq \
+      --arg cs "$checksum" \
+      --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date +%Y-%m-%dT%H:%M:%SZ)" \
+      '{devices: ., checksum: $cs, generated_at: $ts}' > "$temp_lock"
+    mv "$temp_lock" "$lock_path"
+
+    device_count="$(echo "$devices_json" | jq '. | length')"
+    echo "Selected iOS devices: $*"
+    echo "Lock file updated: ${device_count} devices"
+    ;;
+  reset)
+    # Reset just calls eval to regenerate from all files
+    echo "Regenerating lock file from all device files..."
+    exec "$0" eval
+    ;;
+  eval)
+    # Generate lock file from all device files
+    if [ ! -d "$devices_dir" ]; then
+      echo "ERROR: Devices directory not found: $devices_dir" >&2
+      exit 1
+    fi
+
+    # Build JSON array of all device configs
+    devices_json="$(
+      for device_file in "$devices_dir"/*.json; do
+        [ -f "$device_file" ] || continue
+        cat "$device_file"
+      done | jq -s '.'
+    )"
+
+    device_count="$(echo "$devices_json" | jq '. | length')"
+    if [ "$device_count" -eq 0 ]; then
+      echo "ERROR: No device definitions found in ${devices_dir}" >&2
+      exit 1
+    fi
 
     # Compute checksum using lib.sh function
     checksum="$(ios_compute_devices_checksum "$devices_dir" 2>/dev/null || echo "")"
 
-    # Determine device names for output
-    if [ "$selected" = "[]" ]; then
-      device_names="all"
-    else
-      device_names=$(echo "$selected" | jq -r 'join(",")')
-    fi
-
-    # Write lock file with devices array, checksum, and timestamp
+    # Generate lock file
+    config_dir="$(dirname "$config_path")"
+    lock_path="${config_dir%/}/devices.lock.json"
     temp_lock="${lock_path}.tmp"
-    echo "$selected" | jq --arg cs "$checksum" --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date +%Y-%m-%dT%H:%M:%SZ)" \
+
+    echo "$devices_json" | jq \
+      --arg cs "$checksum" \
+      --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date +%Y-%m-%dT%H:%M:%SZ)" \
       '{devices: ., checksum: $cs, generated_at: $ts}' > "$temp_lock"
     mv "$temp_lock" "$lock_path"
 
-    echo "$device_names"
+    echo "Lock file generated: ${device_count} devices"
     ;;
   *)
     usage
