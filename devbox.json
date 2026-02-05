@@ -1,6 +1,32 @@
 {
   "packages": {
     "process-compose": "latest",
-    "act": "latest"
+    "act":             "latest",
+    "shellcheck":      "latest"
+  },
+  "shell": {
+    "scripts": {
+      "lint-android": [
+        "echo 'Running shellcheck on Android plugin scripts...'",
+        "shellcheck -S warning devbox/plugins/android/scripts/*.sh"
+      ],
+      "test-android-lib": [
+        "echo 'Testing Android lib.sh functions...'",
+        "bash devbox/plugins/tests/android/test-lib.sh"
+      ],
+      "test-android-devices": [
+        "echo 'Testing Android devices.sh CLI...'",
+        "bash devbox/plugins/tests/android/test-devices.sh"
+      ],
+      "test-android": [
+        "devbox run lint-android",
+        "devbox run test-android-lib",
+        "devbox run test-android-devices"
+      ],
+      "lint-all": [
+        "echo 'Running shellcheck on all plugins...'",
+        "shellcheck -S warning devbox/plugins/*/scripts/*.sh"
+      ]
+    }
   }
 }

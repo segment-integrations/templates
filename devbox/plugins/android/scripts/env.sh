@@ -62,10 +62,6 @@ android_debug_dump_vars() {
 
 load_android_config() {
   config_path="${ANDROID_PLUGIN_CONFIG:-}"
-  script_dir="$(cd "$(dirname "$0")" && pwd)"
-  if [ -n "${ANDROID_SCRIPTS_DIR:-}" ] && [ -d "${ANDROID_SCRIPTS_DIR}" ]; then
-    script_dir="${ANDROID_SCRIPTS_DIR}"
-  fi
   if [ -z "$config_path" ]; then
     if [ -n "${ANDROID_CONFIG_DIR:-}" ] && [ -f "${ANDROID_CONFIG_DIR}/android.json" ]; then
       config_path="${ANDROID_CONFIG_DIR}/android.json"
@@ -97,7 +93,7 @@ load_android_config() {
     current="$(eval "printf '%s' \"\${$key-}\"")"
     if [ -z "$current" ] && [ -n "$value" ]; then
       eval "$key=\"\$value\""
-      export "$key"
+      eval "export $key"
     fi
   done <<EOF
 $(jq -r 'to_entries[] | "\(.key)\t\(.value|tostring)"' "$config_path")
@@ -142,45 +138,12 @@ resolve_flake_sdk_root() {
     android_debug_log "Android SDK flake path: ${ANDROID_SDK_FLAKE_PATH:-$root}"
   fi
 
-  # Check cache (invalidate if lock file changes)
-  cache_file="${root}/.nix_sdk_eval.cache"
-  lock_file="${root}/devices.lock.json"
-  cache_ttl=3600  # 1 hour
-
-  if [ -f "$cache_file" ] && [ -f "$lock_file" ]; then
-    # Get modification times (works on both macOS and Linux)
-    if command -v stat >/dev/null 2>&1; then
-      cache_mtime=$(stat -f %m "$cache_file" 2>/dev/null || stat -c %Y "$cache_file" 2>/dev/null || echo 0)
-      lock_mtime=$(stat -f %m "$lock_file" 2>/dev/null || stat -c %Y "$lock_file" 2>/dev/null || echo 0)
-      cache_age=$(( $(date +%s) - cache_mtime ))
-
-      # Use cache if fresh and newer than lock file
-      if [ "$cache_age" -lt "$cache_ttl" ] && [ "$cache_mtime" -gt "$lock_mtime" ]; then
-        cached_sdk=$(cat "$cache_file" 2>/dev/null || true)
-        if [ -n "$cached_sdk" ] && [ -d "$cached_sdk/libexec/android-sdk" ]; then
-          if android_debug_enabled; then
-            android_debug_log "Using cached Nix SDK evaluation result"
-          fi
-          printf '%s\n' "$cached_sdk/libexec/android-sdk"
-          return 0
-        fi
-      fi
-    fi
-  fi
-
-  # Perform expensive nix eval
-  if android_debug_enabled; then
-    android_debug_log "Performing Nix SDK evaluation (not cached)"
-  fi
-
   sdk_out=$(
     nix --extra-experimental-features 'nix-command flakes' \
       eval --raw "path:${root}#${output}.outPath" 2>/dev/null || true
   )
 
   if [ -n "${sdk_out:-}" ] && [ -d "$sdk_out/libexec/android-sdk" ]; then
-    # Cache the result
-    echo "$sdk_out" > "$cache_file" 2>/dev/null || true
     printf '%s\n' "$sdk_out/libexec/android-sdk"
     return 0
   fi

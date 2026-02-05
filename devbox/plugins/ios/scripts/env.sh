@@ -175,43 +175,14 @@ ios_latest_xcode_dev_dir() {
 }
 
 ios_resolve_developer_dir() {
-  # Check cache first (1 hour TTL)
-  cache_dir="${DEVBOX_VIRTENV:-${DEVBOX_PROJECT_ROOT:-.}/.devbox/virtenv}/ios"
-  cache_file="${cache_dir}/.xcode_dev_dir.cache"
-  cache_ttl=3600  # 1 hour
-
-  # Ensure cache directory exists
-  if [ ! -d "$cache_dir" ]; then
-    mkdir -p "$cache_dir" 2>/dev/null || true
-  fi
-
-  if [ -f "$cache_file" ]; then
-    # Get cache age (works on both macOS and Linux)
-    if command -v stat >/dev/null 2>&1; then
-      cache_mtime=$(stat -f %m "$cache_file" 2>/dev/null || stat -c %Y "$cache_file" 2>/dev/null || echo 0)
-      cache_age=$(( $(date +%s) - cache_mtime ))
-
-      if [ "$cache_age" -lt "$cache_ttl" ]; then
-        cached_dir=$(cat "$cache_file" 2>/dev/null || true)
-        if [ -n "$cached_dir" ] && [ -d "$cached_dir" ]; then
-          printf '%s\n' "$cached_dir"
-          return 0
-        fi
-      fi
-    fi
-  fi
-
-  # Original resolution logic
   desired="${IOS_DEVELOPER_DIR:-}"
   if [ -n "$desired" ] && [ -d "$desired" ]; then
-    printf '%s\n' "$desired" | tee "$cache_file" >/dev/null
     printf '%s\n' "$desired"
     return 0
   fi
 
   desired="$(ios_latest_xcode_dev_dir 2>/dev/null || true)"
   if [ -n "$desired" ] && [ -d "$desired" ]; then
-    printf '%s\n' "$desired" | tee "$cache_file" >/dev/null
     printf '%s\n' "$desired"
     return 0
   fi
@@ -219,14 +190,12 @@ ios_resolve_developer_dir() {
   if command -v xcode-select >/dev/null 2>&1; then
     desired="$(xcode-select -p 2>/dev/null || true)"
     if [ -n "$desired" ] && [ -d "$desired" ]; then
-      printf '%s\n' "$desired" | tee "$cache_file" >/dev/null
       printf '%s\n' "$desired"
       return 0
     fi
   fi
 
   if [ -d /Applications/Xcode.app/Contents/Developer ]; then
-    printf '%s\n' "/Applications/Xcode.app/Contents/Developer" | tee "$cache_file" >/dev/null
     printf '%s\n' "/Applications/Xcode.app/Contents/Developer"
     return 0
   fi
@@ -237,38 +206,6 @@ ios_resolve_developer_dir() {
 devbox_omit_nix_env() {
   if [ "${DEVBOX_OMIT_NIX_ENV_APPLIED:-}" = "1" ]; then
     return 0
-  fi
-
-  # Check cache for devbox shellenv result
-  cache_dir="${DEVBOX_VIRTENV:-${DEVBOX_PROJECT_ROOT:-.}/.devbox/virtenv}/ios"
-  cache_file="${cache_dir}/.shellenv.cache"
-  cache_ttl=3600  # 1 hour
-
-  # Ensure cache directory exists
-  if [ ! -d "$cache_dir" ]; then
-    mkdir -p "$cache_dir" 2>/dev/null || true
-  fi
-
-  if [ -f "$cache_file" ]; then
-    # Get cache age
-    if command -v stat >/dev/null 2>&1; then
-      cache_mtime=$(stat -f %m "$cache_file" 2>/dev/null || stat -c %Y "$cache_file" 2>/dev/null || echo 0)
-      cache_age=$(( $(date +%s) - cache_mtime ))
-
-      if [ "$cache_age" -lt "$cache_ttl" ]; then
-        # Source cached environment
-        if ios_debug_enabled; then
-          ios_debug_log "Using cached devbox shellenv result"
-        fi
-        . "$cache_file"
-        export DEVBOX_OMIT_NIX_ENV_APPLIED=1
-        return 0
-      fi
-    fi
-  fi
-
-  if ios_debug_enabled; then
-    ios_debug_log "Performing devbox shellenv (not cached)"
   fi
 
   export DEVBOX_OMIT_NIX_ENV_APPLIED=1
@@ -286,25 +223,6 @@ devbox_omit_nix_env() {
   elif [ -n "${DEVBOX_WD:-}" ] && [ -d "${DEVBOX_WD}/.devbox/bin" ]; then
     devbox_project_bin="${DEVBOX_WD}/.devbox/bin"
   fi
-
-  dump_env() {
-    if [ -n "${CI:-}" ] || [ -n "${GITHUB_ACTIONS:-}" ]; then
-      if ! ios_debug_enabled; then
-        return 0
-      fi
-      echo "devbox omit-nix-env $1"
-      echo "  PATH=$PATH"
-      echo "  CC=${CC:-}"
-      echo "  CXX=${CXX:-}"
-      echo "  LD=${LD:-}"
-      echo "  CPP=${CPP:-}"
-      echo "  AR=${AR:-}"
-      echo "  SDKROOT=${SDKROOT:-}"
-      echo "  DEVELOPER_DIR=${DEVELOPER_DIR:-}"
-    fi
-  }
-
-  dump_env "before"
 
   devbox_config_path=""
   if [ -n "${DEVBOX_CONFIG:-}" ] && [ -f "$DEVBOX_CONFIG" ]; then
@@ -350,18 +268,6 @@ devbox_omit_nix_env() {
     PATH="${devbox_bin_dir}:${PATH}"
   fi
   export PATH
-
-  dump_env "after"
-
-  # Cache the environment variables we set
-  {
-    echo "# Cached devbox shellenv result"
-    echo "export CC='${CC:-}'"
-    echo "export CXX='${CXX:-}'"
-    echo "export PATH='${PATH}'"
-    echo "export DEVELOPER_DIR='${DEVELOPER_DIR:-}'"
-    echo "export DEVBOX_OMIT_NIX_ENV_APPLIED=1"
-  } > "$cache_file" 2>/dev/null || true
 }
 
 devbox_omit_nix_env
