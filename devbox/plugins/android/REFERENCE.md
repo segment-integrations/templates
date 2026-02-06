@@ -2,7 +2,7 @@
 
 ## Files
 
-- `devbox.d/android/android.json` — project config (generated on first activation)
+- `.devbox/virtenv/android/android.json` — generated config (created from env vars for Nix flake evaluation)
 - `devbox.d/android/devices/*.json` — device definitions
 - `devbox.d/android/devices.lock.json` — resolved API list for the SDK flake
 - `.devbox/virtenv/android/scripts` — runtime scripts (added to PATH)
@@ -17,7 +17,9 @@ Each device file is JSON with:
 - `tag` (string, optional; e.g. `google_apis`, `google_apis_playstore`, `play_store`, `aosp_atd`, `google_atd`)
 - `preferred_abi` (string, optional; `arm64-v8a`, `x86_64`, `x86`)
 
-## Config keys (`android.json`)
+## Configuration (Environment Variables)
+
+Configure the plugin by setting environment variables in `plugin.json`. These are automatically converted to JSON for internal use by the Nix flake.
 
 - `ANDROID_LOCAL_SDK` — Use local SDK instead of Nix-managed SDK (0=false, 1=true)
 - `ANDROID_COMPILE_SDK` — Compile SDK version (e.g., "36")

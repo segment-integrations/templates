@@ -16,12 +16,12 @@ Three main plugins are located in `devbox/plugins/`:
    - SDK flake: `devbox.d/android/flake.nix`
    - Device definitions: `devbox.d/android/devices/*.json`
    - Scripts: `.devbox/virtenv/android/scripts/`
-   - Configuration: `devbox.d/android/android.json`
+   - Configuration: Environment variables in `plugin.json`
 
 2. **ios** - iOS toolchain + simulator management for macOS
    - Device definitions: `devbox.d/ios/devices/*.json`
    - Scripts: `.devbox/virtenv/ios/scripts/`
-   - Configuration: `devbox.d/ios/ios.json`
+   - Configuration: Environment variables in `plugin.json`
 
 3. **react-native** - Composition layer over Android + iOS plugins
    - Inherits both Android and iOS device management
@@ -312,16 +312,18 @@ act -j ios-quick-smoke
 act -W .github/workflows/pr-checks.yml
 ```
 
-## Configuration Files
+## Configuration
 
-### Android Plugin (`android.json`)
+Configuration for both Android and iOS plugins is now managed via environment variables defined in `plugin.json`. These env vars are converted to JSON at runtime for internal use.
+
+### Android Plugin Environment Variables
 - `ANDROID_DEFAULT_DEVICE` - Default emulator
 - `ANDROID_APP_APK` - APK path/glob for installation
 - `ANDROID_BUILD_TOOLS_VERSION` - Build tools version
 - `ANDROID_LOCAL_SDK` - Use local SDK instead of Nix (0/1)
 - `EVALUATE_DEVICES` - Devices to evaluate in flake
 
-### iOS Plugin (`ios.json`)
+### iOS Plugin Environment Variables
 - `IOS_DEFAULT_DEVICE` - Default simulator
 - `IOS_APP_PROJECT` - Xcode project path
 - `IOS_APP_SCHEME` - Xcode build scheme

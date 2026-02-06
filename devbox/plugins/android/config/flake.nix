@@ -13,12 +13,26 @@
         "aarch64-darwin"
       ];
 
-      versionData = builtins.fromJSON (builtins.readFile ./android.json);
+      # Read generated android.json (created from env vars by android-init.sh)
+      # On first initialization, android.json may not exist yet, so provide defaults
+      configFileExists = builtins.pathExists ./android.json;
+      versionData = if configFileExists
+        then builtins.fromJSON (builtins.readFile ./android.json)
+        else {
+          # Default values for initial flake evaluation before android-init.sh runs
+          ANDROID_BUILD_TOOLS_VERSION = "36.1.0";
+          ANDROID_CMDLINE_TOOLS_VERSION = "19.0";
+          ANDROID_SYSTEM_IMAGE_TAG = "google_apis";
+          ANDROID_INCLUDE_NDK = false;
+          ANDROID_NDK_VERSION = "27.0.12077973";
+          ANDROID_INCLUDE_CMAKE = false;
+          ANDROID_CMAKE_VERSION = "3.22.1";
+        };
       defaultsData = if builtins.hasAttr "defaults" versionData then versionData.defaults else versionData;
       getVar =
         name:
         if builtins.hasAttr name defaultsData then toString (builtins.getAttr name defaultsData)
-        else builtins.throw "Missing required default in devbox.d/android/android.json: ${name}";
+        else builtins.throw "Missing required value in android.json: ${name}";
 
       unique =
         list:

@@ -203,7 +203,7 @@ ios plugin (included)
 1. User runs: devbox run start-emu max
 2. Android plugin's start-emu script executes
 3. Script sources android/env.sh
-   3a. android/env.sh loads android.json from devbox.d/react-native/devbox.d/android/
+   3a. android/env.sh loads generated config (from env vars)
    3b. Resolves Android SDK (via Nix or local)
    3c. Sets ANDROID_SDK_ROOT, ANDROID_AVD_HOME, etc.
 4. Script sources android/avd.sh
@@ -218,7 +218,7 @@ ios plugin (included)
 1. User runs: devbox run start-sim max
 2. iOS plugin's start-sim script executes
 3. Script sources ios/env.sh
-   3a. ios/env.sh loads ios.json from devbox.d/react-native/devbox.d/ios/
+   3a. ios/env.sh loads generated config (from env vars)
    3b. Resolves Xcode developer directory
    3c. Applies devbox_omit_nix_env for native toolchain
    3d. Sets DEVELOPER_DIR, CC, CXX, etc.
@@ -265,20 +265,23 @@ your-react-native-app/
 ├── devbox.json          # Includes react-native plugin
 ├── devbox.d/
 │   ├── android/         # Android-specific configuration (nested)
-│   │   ├── android.json
 │   │   ├── devices/
 │   │   │   ├── min.json
 │   │   │   └── max.json
 │   │   ├── devices.lock.json
 │   │   └── flake.nix
 │   ├── ios/            # iOS-specific configuration (nested)
-│   │   ├── ios.json
 │   │   ├── devices/
 │   │   │   ├── min.json
 │   │   │   └── max.json
 │   │   └── devices.lock.json
 │   └── react-native/   # React Native configuration (optional)
 │       └── react-native.json
+├── .devbox/virtenv/     # Generated config files
+│   ├── android/
+│   │   └── android.json  # Generated from env vars
+│   └── ios/
+│       └── ios.json      # Generated from env vars
 ├── android/            # Android project files
 ├── ios/               # iOS project files
 └── package.json       # Node.js dependencies
@@ -305,14 +308,15 @@ Optional configuration file for React Native-specific settings:
 - Build flags or feature toggles
 
 **When NOT to use:**
-- Platform-specific settings (use android.json or ios.json)
+- Platform-specific settings (use env vars in `plugin.json`)
 - SDK paths (managed by platform plugins)
 - Device definitions (use platform device directories)
 
-### Android Config (`devbox.d/android/android.json`)
+### Android Configuration
 
-Inherited from Android plugin, used for Android-specific settings:
+Android-specific settings are configured via environment variables in `plugin.json`. These are automatically converted to JSON in `.devbox/virtenv/android/android.json` for internal use by the Nix flake.
 
+Example env vars:
 ```json
 {
   "ANDROID_DEFAULT_DEVICE": "max",
@@ -322,9 +326,9 @@ Inherited from Android plugin, used for Android-specific settings:
 }
 ```
 
-### iOS Config (`devbox.d/ios/ios.json`)
+### iOS Configuration
 
-Inherited from iOS plugin, used for iOS-specific settings:
+iOS-specific settings are configured via environment variables in `plugin.json`. These are automatically converted to JSON in `.devbox/virtenv/ios/ios.json` for internal use.
 
 ```json
 {
@@ -423,12 +427,12 @@ devbox run ios.sh devices create min --runtime 15.4
 ```
 
 ### 2. Configuration Management
-Keep platform-specific settings in platform configs:
+Keep platform-specific settings in environment variables in `plugin.json`:
 ```bash
-# ✓ Good: Android-specific in android.json
+# ✓ Good: Android-specific env vars in plugin.json
 ANDROID_DEFAULT_DEVICE=pixel_api34
 
-# ✓ Good: iOS-specific in ios.json
+# ✓ Good: iOS-specific env vars in plugin.json
 IOS_DEFAULT_DEVICE=iphone15
 
 # ✗ Bad: Don't put platform settings in react-native.json

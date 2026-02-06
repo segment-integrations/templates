@@ -1,5 +1,5 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/usr/bin/env sh
+set -eu
 
 if ! (return 0 2>/dev/null); then
   echo "ERROR: validate.sh must be sourced" >&2
@@ -27,23 +27,27 @@ ios_validate_xcode() {
     return 0
   fi
 
-  # Check if Xcode exists
+  # Check if xcode-select exists (env.sh adds /usr/bin to PATH)
   if ! command -v xcode-select >/dev/null 2>&1; then
     echo "Warning: xcode-select not found. Install Xcode from the App Store." >&2
     return 0
   fi
 
-  local dev_dir
+  # Check developer directory
   dev_dir=$(xcode-select -p 2>/dev/null || true)
 
   if [ -z "$dev_dir" ] || [ ! -d "$dev_dir" ]; then
     echo "Warning: Xcode developer directory not found. Run 'xcode-select --install' or install Xcode from the App Store." >&2
+    return 0
   fi
+
+  # Success - Xcode or Nix SDK is available (dev_dir could be /nix/store/... or /Applications/Xcode.app/...)
+  return 0
 }
 
 ios_validate_lock_file() {
-  local lock_path="${IOS_CONFIG_DIR}/devices.lock.json"
-  local devices_dir="${IOS_DEVICES_DIR}"
+  lock_path="${IOS_DEVICES_DIR}/devices.lock"
+  devices_dir="${IOS_DEVICES_DIR}"
 
   # Lock file is optional for iOS
   if [ ! -f "$lock_path" ]; then
@@ -51,7 +55,6 @@ ios_validate_lock_file() {
   fi
 
   # Compute checksum of device files using lib.sh function
-  local current_checksum
   current_checksum=$(ios_compute_devices_checksum "$devices_dir" 2>/dev/null || echo "")
   if [ -z "$current_checksum" ]; then
     # No checksum tool available, skip validation
@@ -59,10 +62,9 @@ ios_validate_lock_file() {
   fi
 
   # Read checksum from lock file
-  local lock_checksum
   lock_checksum=$(jq -r '.checksum // ""' "$lock_path" 2>/dev/null || echo "")
 
   if [ "$current_checksum" != "$lock_checksum" ]; then
-    echo "Warning: devices.lock.json may be stale. Run 'devbox run ios.sh devices eval' to update." >&2
+    echo "Warning: devices.lock may be stale. Run 'devbox run ios.sh devices eval' to update." >&2
   fi
 }

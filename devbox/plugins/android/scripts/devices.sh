@@ -28,7 +28,7 @@ Commands:
   delete <name>                                     Remove device definition
   select <name...>                                  Select specific devices for evaluation
   reset                                             Reset device selection (all devices)
-  eval                                              Generate devices.lock.json
+  eval                                              Generate devices.lock
 
 Device Creation Options:
   --api <n>         Android API level (required, e.g., 28, 34)
@@ -69,7 +69,7 @@ shift || true
 config_dir="${ANDROID_CONFIG_DIR:-./devbox.d/android}"
 devices_dir="${ANDROID_DEVICES_DIR:-${config_dir%/}/devices}"
 scripts_dir="${ANDROID_SCRIPTS_DIR:-${config_dir%/}/scripts}"
-lock_file_path="${config_dir%/}/devices.lock.json"
+lock_file_path="${devices_dir%/}/devices.lock"
 
 # Constants: Allowed values for validation
 readonly ALLOWED_TAGS="default google_apis google_apis_playstore play_store aosp_atd google_atd"
@@ -493,8 +493,7 @@ case "$command_name" in
     # Compute checksum
     checksum="$(android_compute_devices_checksum "$devices_dir" || echo "")"
 
-    # Generate lock file with full device configs
-    lock_file_path="${config_dir}/devices.lock.json"
+    # Generate lock file with full device configs (use existing lock_file_path from header)
     temp_lock_file="${lock_file_path}.tmp"
     echo "$devices_array" | jq \
       --arg cs "$checksum" \
@@ -527,7 +526,7 @@ case "$command_name" in
     ;;
 
   # --------------------------------------------------------------------------
-  # eval - Generate devices.lock.json from device definitions
+  # eval - Generate devices.lock from device definitions
   # --------------------------------------------------------------------------
   eval)
     if [ ! -d "$devices_dir" ]; then

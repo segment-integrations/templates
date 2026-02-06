@@ -8,12 +8,18 @@
   ],
   "env": {
     "REACT_NATIVE_CONFIG_DIR": "{{ .DevboxDir }}",
-    "REACT_NATIVE_SCRIPTS_DIR": "{{ .Virtenv }}/scripts"
+    "REACT_NATIVE_SCRIPTS_DIR": "{{ .Virtenv }}/scripts",
+    "ANDROID_COMPILE_SDK": "35",
+    "ANDROID_TARGET_SDK": "35",
+    "ANDROID_BUILD_TOOLS_VERSION": "35.0.0",
+    "ANDROID_INCLUDE_NDK": "true",
+    "ANDROID_NDK_VERSION": "29.0.14206865",
+    "ANDROID_INCLUDE_CMAKE": "true",
+    "ANDROID_CMAKE_VERSION": "4.1.2"
   },
   "create_files": {
     "{{ .Virtenv }}/scripts/lib.sh": "scripts/lib.sh",
     "{{ .Virtenv }}/scripts/env.sh": "scripts/env.sh",
-    "{{ .Virtenv }}/config/react-native.json": "config/react-native.json",
     "{{ .Virtenv }}/process-compose.yaml": "config/process-compose.yaml",
     "{{ .DevboxDir }}/react-native.json": "config/react-native.json"
   },

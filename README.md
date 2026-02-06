@@ -15,7 +15,7 @@ Shared Devbox plugins and example projects for Android, iOS, and React Native.
 ## Android plugin highlights
 - Device definitions live in `devbox.d/android/devices/*.json`.
 - Use `devbox run --pure android.sh devices list|create|update|delete` to manage devices.
-- `EVALUATE_DEVICES` in `devbox.d/android/android.json` limits which device APIs are evaluated by the flake (empty means all).
+- Set `EVALUATE_DEVICES` environment variable in `plugin.json` to limit which device APIs are evaluated by the flake (empty means all).
 - `devbox run --pure start-emu [device]` boots an emulator.
 - `devbox run --pure start-app [device]` builds/installs/launches on the resolved emulator.
 See `devbox/plugins/android/REFERENCE.md` for the full Android reference.

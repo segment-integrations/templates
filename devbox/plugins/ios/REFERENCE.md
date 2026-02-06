@@ -2,7 +2,7 @@
 
 ## Files
 
-- `devbox.d/ios/ios.json` — project config (generated on first activation)
+- `.devbox/virtenv/ios/ios.json` — generated config (created from env vars for internal use)
 - `devbox.d/ios/devices/*.json` — simulator definitions
 - `.devbox/virtenv/ios/scripts` — runtime scripts (added to PATH)
 
@@ -12,7 +12,9 @@ Each device file is JSON with:
 - `name` (string, required)
 - `runtime` (string, required; e.g. `15.4`, `26.2`)
 
-## Config keys (`ios.json`)
+## Configuration (Environment Variables)
+
+Configure the plugin by setting environment variables in `plugin.json`. These are automatically converted to JSON for internal use.
 
 - `EVALUATE_DEVICES`
 - `IOS_DEFAULT_DEVICE`

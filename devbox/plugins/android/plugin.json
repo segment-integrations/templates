@@ -8,7 +8,19 @@
     "ANDROID_EMULATOR_HOME": "{{ .Virtenv }}/android",
     "ANDROID_CONFIG_DIR": "{{ .DevboxDir }}",
     "ANDROID_DEVICES_DIR": "{{ .DevboxDir }}/devices",
-    "ANDROID_SCRIPTS_DIR": "{{ .Virtenv }}/scripts"
+    "ANDROID_SCRIPTS_DIR": "{{ .Virtenv }}/scripts",
+    "ANDROID_LOCAL_SDK": "0",
+    "ANDROID_COMPILE_SDK": "36",
+    "ANDROID_TARGET_SDK": "36",
+    "ANDROID_DEFAULT_DEVICE": "max",
+    "ANDROID_SYSTEM_IMAGE_TAG": "google_apis",
+    "ANDROID_APP_APK": "app/build/outputs/apk/debug/app-debug.apk",
+    "ANDROID_BUILD_TOOLS_VERSION": "36.1.0",
+    "ANDROID_INCLUDE_NDK": "false",
+    "ANDROID_NDK_VERSION": "27.0.12077973",
+    "ANDROID_INCLUDE_CMAKE": "false",
+    "ANDROID_CMAKE_VERSION": "3.22.1",
+    "ANDROID_CMDLINE_TOOLS_VERSION": "19.0"
   },
   "packages": {
     "bash": "latest",
@@ -19,7 +31,7 @@
     "jq": "latest",
     "jdk17": "latest",
     "gradle": "latest",
-    "path:{{ .DevboxDir }}#android-sdk": ""
+    "path:{{ .Virtenv }}#android-sdk": ""
   },
   "create_files": {
     "{{ .Virtenv }}/android": "",
@@ -33,16 +45,15 @@
     "{{ .Virtenv }}/scripts/android.sh": "scripts/android.sh",
     "{{ .Virtenv }}/scripts/devices.sh": "scripts/devices.sh",
     "{{ .Virtenv }}/scripts/validate.sh": "scripts/validate.sh",
-    "{{ .Virtenv }}/config/android.json": "config/android.json",
+    "{{ .Virtenv }}/scripts/android-init.sh": "scripts/android-init.sh",
+    "{{ .Virtenv }}/flake.nix": "config/flake.nix",
     "{{ .DevboxDir }}/devices/min.json": "config/devices/min.json",
     "{{ .DevboxDir }}/devices/max.json": "config/devices/max.json",
-    "{{ .DevboxDir }}/devices.lock.json": "config/devices.lock.json",
-    "{{ .DevboxDir }}/android.json": "config/android.json",
-    "{{ .DevboxDir }}/flake.nix": "config/flake.nix",
-    "{{ .DevboxDir }}/flake.lock": "config/flake.lock"
+    "{{ .DevboxDir }}/devices/devices.lock": "config/devices.lock.json"
   },
   "shell": {
     "init_hook": [
+      "bash {{ .Virtenv }}/scripts/android-init.sh 2>/dev/null || true",
       ". {{ .Virtenv }}/scripts/env.sh"
     ],
     "scripts": {

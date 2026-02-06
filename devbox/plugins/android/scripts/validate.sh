@@ -5,10 +5,10 @@
 
 set -euo pipefail
 
-# Validate that devices.lock.json matches current device definitions (non-blocking)
+# Validate that devices.lock matches current device definitions (non-blocking)
 android_validate_lock_file() {
   # Local variables (not user-facing)
-  lock_file_path="${ANDROID_CONFIG_DIR}/devices.lock.json"
+  lock_file_path="${ANDROID_DEVICES_DIR}/devices.lock"
   devices_directory="${ANDROID_DEVICES_DIR}"
 
   # Check if lock file exists (it's optional, so no warning if missing)
@@ -35,7 +35,7 @@ android_validate_lock_file() {
 
   # Compare checksums
   if [ "$current_checksum" != "$lock_file_checksum" ]; then
-    echo "WARNING: devices.lock.json may be stale (device definitions changed)" >&2
+    echo "WARNING: devices.lock may be stale (device definitions changed)" >&2
     echo "         Run 'devbox run android.sh devices eval' to update" >&2
   fi
 

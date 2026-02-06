@@ -39,7 +39,7 @@ These scripts are executed directly by users or other scripts:
 **Type:** Sourced library (must be sourced, not executed)
 
 **Key Responsibilities:**
-1. Load iOS plugin configuration from `ios.json`
+1. Load iOS plugin configuration (generated from env vars in virtenv)
 2. Discover and configure Xcode developer directory
 3. Set up macOS-specific environment (`DEVELOPER_DIR`, `CC`, `CXX`)
 4. Configure Devbox with `--omit-nix-env` for native toolchain
@@ -54,7 +54,7 @@ These scripts are executed directly by users or other scripts:
 - `ios_require_tool(tool, message)` - Ensure a tool is available or exit
 - `ios_require_dir(path, message)` - Ensure directory exists or exit
 - `ios_require_dir_contains(base, subpath, message)` - Verify directory contains a path
-- `load_ios_config()` - Load configuration from ios.json
+- `load_ios_config()` - Load configuration (generated from env vars)
 - `ios_resolve_devbox_bin()` - Find devbox executable
 - `ios_latest_xcode_dev_dir()` - Find latest Xcode by version
 - `ios_resolve_developer_dir()` - Resolve Xcode developer directory
@@ -150,7 +150,7 @@ ios.sh <command> [args]
 
 Commands:
   devices <command> [args]  # Delegate to devices.sh
-  config show              # Show ios.json
+  config show              # Show generated config (from env vars)
   config set KEY=VALUE     # Update config values
   config reset             # Reset to default config
   info                     # Show SDK summary
@@ -253,7 +253,7 @@ Commands:
 
 ### `select-device.sh`
 
-**Purpose:** Helper script to update EVALUATE_DEVICES in ios.json.
+**Purpose:** Helper script to update EVALUATE_DEVICES in the generated configuration.
 
 **Type:** Executable script
 
@@ -265,7 +265,7 @@ select-device.sh <device-name> [device-name...]
 **Functionality:**
 1. Takes device names as arguments
 2. Converts to JSON array using jq
-3. Updates `.EVALUATE_DEVICES` in ios.json
+3. Updates `.EVALUATE_DEVICES` in the generated config JSON
 4. Prints confirmation message
 
 **Example:**
@@ -298,8 +298,8 @@ select-device.sh min max
 **Key Functions:**
 
 #### Configuration
-- `ios_config_path()` - Resolve path to ios.json
-  - Tries multiple fallback locations
+- `ios_config_path()` - Resolve path to generated config
+  - Tries multiple fallback locations in virtenv
   - Returns path if found
 
 #### CoreSimulator Health
@@ -415,7 +415,7 @@ select-device.sh (helper - executable)
 2. Delegates to devices.sh via exec
 3. devices.sh parses: "select min max"
 4. Calls select-device.sh min max
-5. select-device.sh updates EVALUATE_DEVICES in ios.json to ["min", "max"]
+5. select-device.sh updates EVALUATE_DEVICES in the generated config to ["min", "max"]
 6. Returns to devices.sh
 7. devices.sh does NOT automatically call eval (unlike Android)
 ```
@@ -440,7 +440,7 @@ select-device.sh (helper - executable)
 
 ```
 1. env.sh is sourced
-2. load_ios_config() reads ios.json
+2. load_ios_config() reads generated config
 3. validate.sh is sourced
 4. Validations run (non-blocking):
    - ios_validate_xcode()

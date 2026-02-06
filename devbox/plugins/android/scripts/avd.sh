@@ -310,9 +310,10 @@ android_setup_avds() {
     exit 1
   fi
 
-  lock_file="${config_dir}/devices.lock.json"
+  devices_dir="$(android_get_devices_dir 2>/dev/null || printf '%s/devices' "$config_dir")"
+  lock_file="${devices_dir%/}/devices.lock"
   if [ ! -f "$lock_file" ]; then
-    echo "ERROR: devices.lock.json not found at ${lock_file}" >&2
+    echo "ERROR: devices.lock not found at ${lock_file}" >&2
     echo "       Run 'devbox run android.sh devices eval' to generate it" >&2
     exit 1
   fi

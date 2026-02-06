@@ -31,7 +31,7 @@ This document provides a detailed reference for all scripts in the Android plugi
 - `devbox run gradle-stop` - Stop Gradle daemon
 
 ### Configuration
-- `devbox run android.sh config show` - Display android.json configuration
+- `devbox run android.sh config show` - Display generated configuration (from env vars)
 - `devbox run android.sh config set KEY=VALUE` - Update configuration
 - `devbox run android.sh info` - Display resolved SDK information
 
@@ -76,7 +76,7 @@ These scripts are executed directly by users or other scripts:
 **Type:** Sourced library (must be sourced, not executed)
 
 **Key Responsibilities:**
-1. Load Android plugin configuration from `android.json`
+1. Load Android plugin configuration (generated from env vars in virtenv)
 2. Resolve Android SDK root (via Nix flake or local SDK)
 3. Set up Android environment variables (`ANDROID_SDK_ROOT`, `ANDROID_HOME`, `ANDROID_AVD_HOME`, etc.)
 4. Configure PATH to include SDK tools and plugin scripts
@@ -90,7 +90,7 @@ These scripts are executed directly by users or other scripts:
 - `android_require_tool(tool, message)` - Ensure a tool is available or exit
 - `android_require_dir_contains(base, subpath, message)` - Verify directory contains a path
 - `android_debug_dump_vars(vars...)` - Dump variable values in debug mode
-- `load_android_config()` - Load configuration from android.json
+- `load_android_config()` - Load configuration (generated from env vars)
 - `resolve_flake_sdk_root(output)` - Resolve SDK from Nix flake
 - `detect_sdk_root_from_sdkmanager()` - Detect SDK from sdkmanager location
 - `detect_sdk_root_from_tools()` - Detect SDK from adb/emulator location
@@ -178,7 +178,7 @@ android.sh <command> [args]
 
 Commands:
   devices <command> [args]  # Delegate to devices.sh
-  config show              # Show android.json
+  config show              # Show generated config (from env vars)
   config set KEY=VALUE     # Update config values
   config reset             # Reset to default config
   info                     # Show SDK summary
@@ -285,7 +285,7 @@ Commands:
 
 ### `select-device.sh`
 
-**Purpose:** Helper script to update EVALUATE_DEVICES in android.json.
+**Purpose:** Helper script to update EVALUATE_DEVICES in the generated configuration.
 
 **Type:** Executable script
 
@@ -297,7 +297,7 @@ select-device.sh <device-name> [device-name...]
 **Functionality:**
 1. Takes device names as arguments
 2. Converts to JSON array using jq
-3. Updates `.EVALUATE_DEVICES` in android.json
+3. Updates `.EVALUATE_DEVICES` in the generated config JSON
 4. Prints confirmation message
 
 **Example:**
@@ -423,7 +423,7 @@ select-device.sh (helper - executable)
 2. Delegates to devices.sh via exec
 3. devices.sh parses: "select max"
 4. Calls select-device.sh max
-5. select-device.sh updates EVALUATE_DEVICES in android.json
+5. select-device.sh updates EVALUATE_DEVICES in the generated config
 6. Returns to devices.sh
 7. devices.sh calls itself recursively: devices.sh eval
 8. eval generates devices.lock.json with max device's API

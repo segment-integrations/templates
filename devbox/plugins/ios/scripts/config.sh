@@ -34,67 +34,61 @@ ios_debug_log "config.sh loaded"
 ios_config_show() {
   config_path="$(ios_config_path 2>/dev/null || true)"
   if [ -z "$config_path" ] || [ ! -f "$config_path" ]; then
-    echo "ERROR: Config file not found" >&2
+    echo "ERROR: Generated configuration not found: $config_path" >&2
+    echo "       Run 'devbox shell' to initialize the environment" >&2
     return 1
   fi
+  echo "Current iOS configuration (generated from environment variables):"
+  echo ""
   cat "$config_path"
+  echo ""
+  echo "To override values, set environment variables in your devbox.json:"
+  echo '  "env": {'
+  echo '    "IOS_DEFAULT_DEVICE": "min",'
+  echo '    "IOS_APP_PROJECT": "MyApp.xcodeproj"'
+  echo '  }'
 }
 
 # Set configuration values
 # Args: key=value pairs
 ios_config_set() {
-  ios_require_jq
-  config_path="$(ios_config_path 2>/dev/null || true)"
-  if [ -z "$config_path" ] || [ ! -f "$config_path" ]; then
-    echo "ERROR: Config file not found" >&2
-    return 1
+  echo "Configuration is now managed via environment variables." >&2
+  echo "" >&2
+  echo "To override configuration values, add them to your devbox.json:" >&2
+  echo "" >&2
+  echo '{' >&2
+  echo '  "include": [' >&2
+  echo '    "plugin:ios"' >&2
+  echo '  ],' >&2
+  echo '  "env": {' >&2
+
+  # Show the key=value pairs they wanted to set as examples
+  if [ -n "${1-}" ]; then
+    echo "    # Add these overrides:" >&2
+    while [ "${1-}" != "" ]; do
+      pair="$1"
+      key="${pair%%=*}"
+      value="${pair#*=}"
+      echo "    \"${key}\": \"${value}\"," >&2
+      shift
+    done
   fi
 
-  if [ -z "${1-}" ]; then
-    echo "ERROR: No key=value pairs provided" >&2
-    return 1
-  fi
-
-  tmp="${config_path}.tmp"
-  filter='.'
-  while [ "${1-}" != "" ]; do
-    pair="$1"
-    key="${pair%%=*}"
-    value="${pair#*=}"
-    if [ -z "$key" ] || [ "$key" = "$value" ]; then
-      echo "ERROR: Invalid key=value: $pair" >&2
-      return 1
-    fi
-    if ! jq -e --arg key "$key" 'has($key)' "$config_path" >/dev/null 2>&1; then
-      echo "ERROR: Unknown config key: $key" >&2
-      return 1
-    fi
-    filter="$filter | .${key} = \"${value}\""
-    shift
-  done
-  jq "$filter" "$config_path" >"$tmp"
-  mv "$tmp" "$config_path"
+  echo '  }' >&2
+  echo '}' >&2
+  echo "" >&2
+  echo "After updating devbox.json, run 'devbox shell' to apply changes." >&2
+  return 1
 }
 
 # Reset configuration to defaults
 ios_config_reset() {
-  config_path="$(ios_config_path 2>/dev/null || true)"
-  if [ -z "$config_path" ]; then
-    echo "ERROR: Config file not found" >&2
-    return 1
-  fi
-
-  default_config=""
-  if [ -n "${IOS_SCRIPTS_DIR:-}" ]; then
-    candidate="${IOS_SCRIPTS_DIR%/}/../config/ios.json"
-    if [ -f "$candidate" ]; then
-      default_config="$candidate"
-    fi
-  fi
-  if [ -z "$default_config" ]; then
-    echo "ERROR: Default iOS config not found; reinstall the plugin to restore defaults." >&2
-    return 1
-  fi
-  cp "$default_config" "$config_path"
-  echo "Config reset to defaults"
+  echo "Configuration is now managed via environment variables." >&2
+  echo "" >&2
+  echo "To reset to defaults, remove any IOS_* environment variable" >&2
+  echo "overrides from your devbox.json env section." >&2
+  echo "" >&2
+  echo "Plugin defaults are defined in the ios plugin.json file." >&2
+  echo "Run 'ios.sh config show' to see current values." >&2
+  return 1
 }

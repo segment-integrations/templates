@@ -5,8 +5,14 @@
       "api": 36,
       "device": "medium_phone",
       "tag": "google_apis"
+    },
+    {
+      "name": "pixel_api21",
+      "api": 21,
+      "device": "pixel",
+      "tag": "google_apis"
     }
   ],
   "checksum": "8df4d3393b61fbbb08e45cf8762f95c521316938e514527916e4fce88a849d57",
-  "generated_at": "2026-02-05T23:19:37Z"
+  "generated_at": "2026-02-06T17:52:27Z"
 }

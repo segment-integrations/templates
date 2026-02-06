@@ -79,37 +79,23 @@ ios_require_dir_contains() {
   fi
 }
 
+# Add macOS system tools to PATH for pure environments
+# Only on macOS - needed for xcode-select, xcrun, etc.
+if [ "$(uname -s)" = "Darwin" ]; then
+  PATH="/usr/bin:${PATH}"
+  export PATH
+  ios_debug_log "Added /usr/bin to PATH for macOS system tools"
+fi
+
 load_ios_config() {
-  config_path="${IOS_PLUGIN_CONFIG:-}"
-  if [ -z "$config_path" ]; then
-    config_path="$(ios_config_path 2>/dev/null || echo "./devbox.d/ios/ios.json")"
+  # Config is generated from env vars by ios-init.sh in virtenv
+  # We just need to ensure all env vars are exported
+  # This function is now a no-op since env vars are the source of truth
+  # and are already set by the plugin's env section
+
+  if ios_debug_enabled; then
+    ios_debug_log "iOS config loaded from environment variables"
   fi
-
-  if [ ! -f "$config_path" ]; then
-    return 0
-  fi
-
-  if ! command -v jq >/dev/null 2>&1; then
-    echo "jq is required to read ${config_path}. Ensure the Devbox iOS plugin packages are installed." >&2
-    exit 1
-  fi
-
-  tab="$(printf '\t')"
-  while IFS="$tab" read -r key value; do
-    if [ -z "$key" ] || [ "$value" = "null" ]; then
-      continue
-    fi
-    current="$(eval "printf '%s' \"\${$key-}\"")"
-    if [ -z "$current" ] && [ -n "$value" ]; then
-      eval "$key=\"$value\""
-      # shellcheck disable=SC2163
-      export "$key"
-    fi
-  done <<CONFIG_EOF
-$(jq -r 'to_entries[] | "\(.key)\t\(.value|tostring)"' "$config_path")
-CONFIG_EOF
-
-  ios_debug_log "Loaded iOS plugin config: $config_path"
 }
 
 load_ios_config

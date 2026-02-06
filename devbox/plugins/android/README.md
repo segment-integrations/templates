@@ -6,9 +6,9 @@ shells are pure and do not touch global `~/.android` state.
 Runtime scripts live in the virtenv (`.devbox/virtenv/android/scripts`) and are added to PATH when
 the plugin activates.
 
-Default configuration lives at `devbox.d/android/android.json`. Override values there to set SDK
-versions, default device selection, or enable `ANDROID_LOCAL_SDK`. The plugin initializes
-`android.json` and the flake files on first activation.
+Configuration is managed via environment variables in `plugin.json`. The plugin automatically generates
+a JSON file in the virtenv for Nix flake evaluation. Set env vars to configure SDK versions, default
+device selection, or enable `ANDROID_LOCAL_SDK`.
 
 The Android SDK flake lives under `devbox.d/android/` and exposes `android-sdk*` outputs.
 

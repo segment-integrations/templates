@@ -5,7 +5,17 @@
   "env": {
     "IOS_CONFIG_DIR": "{{ .DevboxDir }}",
     "IOS_DEVICES_DIR": "{{ .DevboxDir }}/devices",
-    "IOS_SCRIPTS_DIR": "{{ .Virtenv }}/scripts"
+    "IOS_SCRIPTS_DIR": "{{ .Virtenv }}/scripts",
+    "IOS_DEFAULT_DEVICE": "max",
+    "IOS_DEFAULT_RUNTIME": "",
+    "IOS_APP_PROJECT": "ios.xcodeproj",
+    "IOS_APP_SCHEME": "ios",
+    "IOS_APP_BUNDLE_ID": "com.example.ios",
+    "IOS_APP_ARTIFACT": ".devbox/virtenv/ios/DerivedData/Build/Products/Debug-iphonesimulator/ios.app",
+    "IOS_APP_DERIVED_DATA": "",
+    "IOS_DEVELOPER_DIR": "",
+    "IOS_DOWNLOAD_RUNTIME": "1",
+    "IOS_XCODE_ENV_PATH": ""
   },
   "packages": {
     "bash": "latest",
@@ -30,14 +40,14 @@
     "{{ .Virtenv }}/scripts/config.sh": "scripts/config.sh",
     "{{ .Virtenv }}/scripts/ios.sh": "scripts/ios.sh",
     "{{ .Virtenv }}/scripts/devices.sh": "scripts/devices.sh",
-    "{{ .Virtenv }}/config/ios.json": "config/ios.json",
+    "{{ .Virtenv }}/scripts/ios-init.sh": "scripts/ios-init.sh",
     "{{ .DevboxDir }}/devices/min.json": "config/devices/min.json",
     "{{ .DevboxDir }}/devices/max.json": "config/devices/max.json",
-    "{{ .DevboxDir }}/devices.lock.json": "config/devices.lock.json",
-    "{{ .DevboxDir }}/ios.json": "config/ios.json"
+    "{{ .DevboxDir }}/devices/devices.lock": "config/devices.lock.json"
   },
   "shell": {
     "init_hook": [
+      "bash {{ .Virtenv }}/scripts/ios-init.sh 2>/dev/null || true",
       ". {{ .Virtenv }}/scripts/env.sh"
     ],
     "scripts": {

@@ -61,46 +61,13 @@ android_debug_dump_vars() {
 }
 
 load_android_config() {
-  config_path="${ANDROID_PLUGIN_CONFIG:-}"
-  if [ -z "$config_path" ]; then
-    if [ -n "${ANDROID_CONFIG_DIR:-}" ] && [ -f "${ANDROID_CONFIG_DIR}/android.json" ]; then
-      config_path="${ANDROID_CONFIG_DIR}/android.json"
-    elif [ -n "${DEVBOX_PROJECT_ROOT:-}" ] && [ -f "${DEVBOX_PROJECT_ROOT}/devbox.d/android/android.json" ]; then
-      config_path="${DEVBOX_PROJECT_ROOT}/devbox.d/android/android.json"
-    elif [ -n "${DEVBOX_PROJECT_DIR:-}" ] && [ -f "${DEVBOX_PROJECT_DIR}/devbox.d/android/android.json" ]; then
-      config_path="${DEVBOX_PROJECT_DIR}/devbox.d/android/android.json"
-    elif [ -n "${DEVBOX_WD:-}" ] && [ -f "${DEVBOX_WD}/devbox.d/android/android.json" ]; then
-      config_path="${DEVBOX_WD}/devbox.d/android/android.json"
-    else
-      config_path="./devbox.d/android/android.json"
-    fi
-  fi
-
-  if [ ! -f "$config_path" ]; then
-    return 0
-  fi
-
-  if ! command -v jq >/dev/null 2>&1; then
-    echo "jq is required to read ${config_path}. Ensure the Devbox Android plugin packages are installed." >&2
-    exit 1
-  fi
-
-  tab="$(printf '\t')"
-  while IFS="$tab" read -r key value; do
-    if [ -z "$key" ] || [ "$value" = "null" ]; then
-      continue
-    fi
-    current="$(eval "printf '%s' \"\${$key-}\"")"
-    if [ -z "$current" ] && [ -n "$value" ]; then
-      eval "$key=\"\$value\""
-      eval "export $key"
-    fi
-  done <<EOF
-$(jq -r 'to_entries[] | "\(.key)\t\(.value|tostring)"' "$config_path")
-EOF
+  # Config is generated from env vars by android-init.sh in virtenv
+  # We just need to ensure all env vars are exported
+  # This function is now a no-op since env vars are the source of truth
+  # and are already set by the plugin's env section
 
   if android_debug_enabled; then
-    android_debug_log "Loaded Android plugin config: $config_path"
+    android_debug_log "Android config loaded from environment variables"
   fi
 }
 

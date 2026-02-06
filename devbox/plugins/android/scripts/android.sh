@@ -20,17 +20,19 @@ Usage: android.sh <command> [args]
 
 Commands:
   devices <command> [args]     Manage device definitions
-  config show                  Display android.json configuration
-  config set KEY=VALUE [...]   Update configuration values
-  config reset                 Reset to default configuration
+  config show                  Display current configuration (generated from env vars)
+  config set KEY=VALUE [...]   Show how to override config via devbox.json env vars
+  config reset                 Show how to reset to defaults
   info                         Display resolved SDK information
 
 Examples:
   android.sh devices list
   android.sh devices create pixel_api28 --api 28 --device pixel
-  android.sh config set ANDROID_DEFAULT_DEVICE=max
   android.sh config show
   android.sh info
+
+Note: Configuration is managed via environment variables in devbox.json.
+      Use 'config set' to see examples of how to override values.
 USAGE
   exit 1
 }
@@ -47,8 +49,9 @@ shift || true
 
 # Local variables (derived from user-overridable variables)
 config_dir="${ANDROID_CONFIG_DIR:-./devbox.d/android}"
-config_path="${config_dir%/}/android.json"
 scripts_dir="${ANDROID_SCRIPTS_DIR:-${config_dir%/}/scripts}"
+# Generated config in virtenv (created by android-init.sh from env vars)
+generated_config="${scripts_dir%/}/../android.json"
 
 # ============================================================================
 # Helper Functions
@@ -96,77 +99,64 @@ case "$command_name" in
     case "$subcommand" in
       # Show current configuration
       show)
-        if [ ! -f "$config_path" ]; then
-          echo "ERROR: Configuration file not found: $config_path" >&2
+        echo "Current Android configuration (generated from environment variables):"
+        echo ""
+        if [ -f "$generated_config" ]; then
+          cat "$generated_config"
+        else
+          echo "ERROR: Generated configuration not found: $generated_config" >&2
+          echo "       Run 'devbox shell' to initialize the environment" >&2
           exit 1
         fi
-        cat "$config_path"
+        echo ""
+        echo "To override values, set environment variables in your devbox.json:"
+        echo '  "env": {'
+        echo '    "ANDROID_COMPILE_SDK": "35",'
+        echo '    "ANDROID_TARGET_SDK": "35"'
+        echo '  }'
         ;;
 
       # Set configuration key=value pairs
       set)
-        if [ -z "${1-}" ]; then
-          echo "ERROR: No key=value pairs provided" >&2
-          usage
+        echo "Configuration is now managed via environment variables." >&2
+        echo "" >&2
+        echo "To override configuration values, add them to your devbox.json:" >&2
+        echo "" >&2
+        echo '{' >&2
+        echo '  "include": [' >&2
+        echo '    "plugin:android"' >&2
+        echo '  ],' >&2
+        echo '  "env": {' >&2
+
+        # Show the key=value pairs they wanted to set as examples
+        if [ -n "${1-}" ]; then
+          echo "    # Add these overrides:" >&2
+          while [ "${1-}" != "" ]; do
+            key_value_pair="$1"
+            config_key="${key_value_pair%%=*}"
+            config_value="${key_value_pair#*=}"
+            echo "    \"${config_key}\": \"${config_value}\"," >&2
+            shift
+          done
         fi
 
-        if [ ! -f "$config_path" ]; then
-          echo "ERROR: Configuration file not found: $config_path" >&2
-          exit 1
-        fi
-
-        # Build jq filter for all key=value updates
-        temp_file="${config_path}.tmp"
-        jq_filter='.'
-
-        while [ "${1-}" != "" ]; do
-          key_value_pair="$1"
-          config_key="${key_value_pair%%=*}"
-          config_value="${key_value_pair#*=}"
-
-          # Validate key exists in config
-          if [ -z "$config_key" ] || [ "$config_key" = "$config_value" ]; then
-            echo "ERROR: Invalid key=value format: $key_value_pair" >&2
-            echo "       Expected: KEY=VALUE" >&2
-            exit 1
-          fi
-
-          if ! jq -e --arg key "$config_key" 'has($key)' "$config_path" >/dev/null 2>&1; then
-            echo "ERROR: Unknown configuration key: $config_key" >&2
-            echo "       Run 'android.sh config show' to see available keys" >&2
-            exit 1
-          fi
-
-          # Add to jq filter
-          jq_filter="$jq_filter | .${config_key} = \"${config_value}\""
-          shift
-        done
-
-        # Apply all updates atomically
-        jq "$jq_filter" "$config_path" > "$temp_file"
-        mv "$temp_file" "$config_path"
-        echo "Configuration updated successfully"
+        echo '  }' >&2
+        echo '}' >&2
+        echo "" >&2
+        echo "After updating devbox.json, run 'devbox shell' to apply changes." >&2
+        exit 1
         ;;
 
       # Reset to default configuration
       reset)
-        # Find default config template
-        default_config=""
-        if [ -n "${ANDROID_SCRIPTS_DIR:-}" ]; then
-          default_config_candidate="${ANDROID_SCRIPTS_DIR%/}/../config/android.json"
-          if [ -f "$default_config_candidate" ]; then
-            default_config="$default_config_candidate"
-          fi
-        fi
-
-        if [ -z "$default_config" ]; then
-          echo "ERROR: Default configuration not found" >&2
-          echo "       Reinstall the Android plugin to restore defaults" >&2
-          exit 1
-        fi
-
-        cp "$default_config" "$config_path"
-        echo "Configuration reset to defaults: $config_path"
+        echo "Configuration is now managed via environment variables." >&2
+        echo "" >&2
+        echo "To reset to defaults, remove any ANDROID_* environment variable" >&2
+        echo "overrides from your devbox.json env section." >&2
+        echo "" >&2
+        echo "Plugin defaults are defined in the android plugin.json file." >&2
+        echo "Run 'android.sh config show' to see current values." >&2
+        exit 1
         ;;
 
       *)

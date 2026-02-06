@@ -190,8 +190,7 @@ case "$command_name" in
     checksum="$(ios_compute_devices_checksum "$devices_dir" 2>/dev/null || echo "")"
 
     # Generate lock file
-    config_dir="$(dirname "$config_path")"
-    lock_path="${config_dir%/}/devices.lock.json"
+    lock_path="${devices_dir%/}/devices.lock"
     temp_lock="${lock_path}.tmp"
 
     echo "$devices_json" | jq \
@@ -234,8 +233,7 @@ case "$command_name" in
     checksum="$(ios_compute_devices_checksum "$devices_dir" 2>/dev/null || echo "")"
 
     # Generate lock file
-    config_dir="$(dirname "$config_path")"
-    lock_path="${config_dir%/}/devices.lock.json"
+    lock_path="${devices_dir%/}/devices.lock"
     temp_lock="${lock_path}.tmp"
 
     echo "$devices_json" | jq \
