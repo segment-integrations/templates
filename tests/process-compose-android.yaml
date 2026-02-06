@@ -1,0 +1,110 @@
+version: "0.5"
+
+environment:
+  - "ANDROID_SERIAL=emulator-5554"
+  - "TEST_TIMEOUT=300"
+  - "BOOT_TIMEOUT=180"
+
+log_location: "/tmp/android-e2e-logs"
+log_level: info
+
+processes:
+  # Phase 1: Setup - runs first
+  setup-avd:
+    command: "devbox run --pure android.sh avd setup ${ANDROID_DEFAULT_DEVICE:-max}"
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "test -d ${ANDROID_AVD_HOME}/${ANDROID_DEFAULT_DEVICE:-max}.avd"
+      initial_delay_seconds: 1
+      period_seconds: 2
+      timeout_seconds: 30
+      success_threshold: 1
+
+  # Phase 2: Build - can run in parallel with setup
+  build-app:
+    command: "devbox run --pure build:android"
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "test -f ${ANDROID_APP_APK:-app/build/outputs/apk/debug/app-debug.apk}"
+      initial_delay_seconds: 5
+      period_seconds: 5
+      timeout_seconds: 300
+      success_threshold: 1
+
+  # Phase 3: Start emulator - depends on setup being complete
+  # If this fails, all dependent processes (deploy-app, verify-app-running) are SKIPPED
+  android-emulator:
+    command: "devbox run --pure start:emu ${ANDROID_DEFAULT_DEVICE:-max}"
+    depends_on:
+      setup-avd:
+        condition: process_completed_successfully  # Won't start if setup-avd failed
+    availability:
+      restart: "on_failure"   # Retry on crash
+      max_restarts: 2         # But only twice - then FAIL
+    readiness_probe:
+      exec:
+        command: "adb -s ${ANDROID_SERIAL} shell getprop sys.boot_completed | grep -q 1"
+      initial_delay_seconds: 10
+      period_seconds: 3
+      timeout_seconds: 180       # FAIL after 180s if not ready
+      success_threshold: 1
+      failure_threshold: 3       # FAIL after 3 consecutive check failures
+    liveness_probe:
+      exec:
+        command: "adb devices | grep -q ${ANDROID_SERIAL}"
+      initial_delay_seconds: 15
+      period_seconds: 10
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 3       # FAIL and restart if connection lost
+    shutdown:
+      command: "devbox run --pure stop:emu"
+      timeout_seconds: 30
+
+  # Phase 4: Deploy app - depends on both build and emulator being ready
+  deploy-app:
+    command: "devbox run --pure start:android"
+    depends_on:
+      build-app:
+        condition: process_completed_successfully
+      android-emulator:
+        condition: process_healthy
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "adb -s ${ANDROID_SERIAL} shell pm list packages | grep -q ${ANDROID_APP_ID:-com.example.devbox}"
+      initial_delay_seconds: 5
+      period_seconds: 3
+      timeout_seconds: 60
+      success_threshold: 1
+
+  # Phase 5: Verification - runs after deployment
+  verify-app-running:
+    command: "adb -s ${ANDROID_SERIAL} shell pidof ${ANDROID_APP_ID:-com.example.devbox}"
+    depends_on:
+      deploy-app:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "adb -s ${ANDROID_SERIAL} shell pidof ${ANDROID_APP_ID:-com.example.devbox}"
+      initial_delay_seconds: 2
+      period_seconds: 3
+      timeout_seconds: 30
+      success_threshold: 1
+
+  # Cleanup process - runs at the end
+  # Uses process_completed (not process_completed_successfully) so it runs even if tests fail
+  cleanup:
+    command: "echo 'Cleanup complete' && devbox run --pure stop:emu || true"
+    depends_on:
+      verify-app-running:
+        condition: process_completed  # Runs even if verification fails
+    availability:
+      restart: "no"

@@ -10,7 +10,7 @@ This is a mobile development templates repository providing Devbox plugins and e
 
 ### Plugin System
 
-Three main plugins are located in `devbox/plugins/`:
+Three main plugins are located in `plugins/`:
 
 1. **android** - Android SDK + emulator management via Nix flake
    - SDK flake: `devbox.d/android/flake.nix`
@@ -58,7 +58,7 @@ Three main plugins are located in `devbox/plugins/`:
 devbox shell
 
 # Validate plugin installation
-cd devbox/examples/{android|ios|react-native}
+cd examples/{android|ios|react-native}
 devbox shell
 ```
 
@@ -105,7 +105,7 @@ devbox run --pure ios.sh config show
 
 #### Android
 ```bash
-cd devbox/examples/android
+cd examples/android
 
 # Build the app
 devbox run --pure build-android
@@ -122,7 +122,7 @@ devbox run --pure stop-emu
 
 #### iOS
 ```bash
-cd devbox/examples/ios
+cd examples/ios
 
 # Build the app
 devbox run --pure build-ios
@@ -139,7 +139,7 @@ devbox run --pure stop-sim
 
 #### React Native
 ```bash
-cd devbox/examples/react-native
+cd examples/react-native
 
 # Install dependencies
 npm install
@@ -163,11 +163,11 @@ devbox run build  # Runs build-android, build-ios, build-web
 #### Plugin Tests
 ```bash
 # Run Android plugin tests
-cd devbox/plugins/tests/android
+cd plugins/tests/android
 ./test-*.sh
 
 # Run iOS plugin tests
-cd devbox/plugins/tests/ios
+cd plugins/tests/ios
 ./test-*.sh
 ```
 
@@ -182,37 +182,42 @@ act -j ios-plugin-tests
 
 ```
 .
-├── devbox/
-│   ├── plugins/
-│   │   ├── android/          # Android plugin
-│   │   │   ├── config/       # Default config templates
-│   │   │   ├── scripts/      # Runtime scripts (android.sh, avd.sh, etc.)
-│   │   │   ├── plugin.json   # Plugin manifest
-│   │   │   └── REFERENCE.md  # Complete API reference
-│   │   ├── ios/              # iOS plugin
-│   │   │   ├── config/
-│   │   │   ├── scripts/
-│   │   │   ├── plugin.json
-│   │   │   └── REFERENCE.md
-│   │   ├── react-native/     # React Native plugin
-│   │   │   ├── plugin.json
-│   │   │   └── REFERENCE.md
-│   │   ├── tests/            # Plugin unit tests
-│   │   └── CONVENTIONS.md    # Plugin development patterns
-│   └── examples/
-│       ├── android/          # Minimal Android app
-│       │   ├── devbox.d/     # Device definitions and config
-│       │   └── devbox.json   # Includes android plugin
-│       ├── ios/              # Swift package example
-│       │   ├── devbox.d/
-│       │   └── devbox.json   # Includes ios plugin
-│       └── react-native/     # React Native app
-│           ├── devbox.d/     # Both Android and iOS devices
-│           └── devbox.json   # Includes react-native plugin
+├── plugins/
+│   ├── android/          # Android plugin
+│   │   ├── config/       # Default config templates
+│   │   ├── scripts/      # Runtime scripts (android.sh, avd.sh, etc.)
+│   │   ├── plugin.json   # Plugin manifest
+│   │   └── REFERENCE.md  # Complete API reference
+│   ├── ios/              # iOS plugin
+│   │   ├── config/
+│   │   ├── scripts/
+│   │   ├── plugin.json
+│   │   └── REFERENCE.md
+│   ├── react-native/     # React Native plugin
+│   │   ├── plugin.json
+│   │   └── REFERENCE.md
+│   ├── tests/            # Plugin unit tests
+│   └── CONVENTIONS.md    # Plugin development patterns
+├── examples/
+│   ├── android/          # Minimal Android app
+│   │   ├── devbox.d/     # Device definitions and config
+│   │   └── devbox.json   # Includes android plugin
+│   ├── ios/              # Swift package example
+│   │   ├── devbox.d/
+│   │   └── devbox.json   # Includes ios plugin
+│   └── react-native/     # React Native app
+│       ├── devbox.d/     # Both Android and iOS devices
+│       └── devbox.json   # Includes react-native plugin
+├── tests/                # E2E test scripts
+│   ├── e2e-android.sh
+│   ├── e2e-ios.sh
+│   ├── e2e-react-native.sh
+│   ├── e2e-sequential.sh
+│   └── e2e-all.sh
 ├── .github/workflows/
-│   ├── pr-checks.yml         # Fast PR validation (~15-30 min)
-│   └── e2e-full.yml          # Full E2E tests (~45-60 min per platform)
-└── devbox.json               # Root devbox config
+│   ├── pr-checks.yml     # Fast PR validation (~15-30 min)
+│   └── e2e-full.yml      # Full E2E tests (~45-60 min per platform)
+└── devbox.json           # Root devbox config
 ```
 
 ## Development Patterns
@@ -223,7 +228,7 @@ When modifying plugins:
 
 1. Plugin configuration is in `plugin.json` (init hooks, env vars, scripts)
 2. Runtime scripts go in `scripts/` directory
-3. Follow conventions in `devbox/plugins/CONVENTIONS.md`:
+3. Follow conventions in `plugins/CONVENTIONS.md`:
    - Use `{platform}_` prefixes for functions
    - `set -euo pipefail` for safety
    - Non-blocking validation (warn, don't fail)
@@ -357,8 +362,8 @@ Configuration for both Android and iOS plugins is now managed via environment va
 ## References
 
 For complete command and configuration references, see:
-- `devbox/plugins/android/REFERENCE.md`
-- `devbox/plugins/ios/REFERENCE.md`
-- `devbox/plugins/react-native/REFERENCE.md`
-- `devbox/plugins/CONVENTIONS.md`
+- `plugins/android/REFERENCE.md`
+- `plugins/ios/REFERENCE.md`
+- `plugins/react-native/REFERENCE.md`
+- `plugins/CONVENTIONS.md`
 - `.github/workflows/README.md`

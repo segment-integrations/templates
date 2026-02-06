@@ -1,0 +1,67 @@
+version: "0.5"
+
+log_location: "/tmp/devbox-e2e-logs"
+log_level: info
+
+processes:
+  # Sequential E2E tests to avoid resource conflicts
+  e2e-android:
+    command: "bash tests/e2e-android-orchestrated.sh"
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "test -f tests/e2e-android-orchestrated.sh"
+      initial_delay_seconds: 1
+      period_seconds: 1
+      timeout_seconds: 5
+      success_threshold: 1
+
+  e2e-ios:
+    command: "bash tests/e2e-ios-orchestrated.sh"
+    depends_on:
+      e2e-android:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "test -f tests/e2e-ios-orchestrated.sh"
+      initial_delay_seconds: 1
+      period_seconds: 1
+      timeout_seconds: 5
+      success_threshold: 1
+
+  e2e-react-native:
+    command: "bash tests/e2e-react-native-orchestrated.sh"
+    depends_on:
+      e2e-ios:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "test -f tests/e2e-react-native-orchestrated.sh"
+      initial_delay_seconds: 1
+      period_seconds: 1
+      timeout_seconds: 5
+      success_threshold: 1
+
+  # Summary
+  summary:
+    command: |
+      echo ""
+      echo "========================================"
+      echo "✓ All E2E tests passed!"
+      echo "========================================"
+      echo ""
+      echo "E2E Test Summary:"
+      echo "  ✓ Android (emulator boot, build, deploy, verify)"
+      echo "  ✓ iOS (simulator boot, build, deploy, verify)"
+      echo "  ✓ React Native (both platforms)"
+      echo ""
+    depends_on:
+      e2e-react-native:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"

@@ -6,7 +6,7 @@ set -euo pipefail
 # - Within each platform, tests run sequentially to avoid emulator/simulator conflicts
 # - React Native tests both platforms sequentially after standalone tests complete
 
-# This script is in devbox/tests/, examples are in devbox/examples/
+# This script is in tests/, examples are in examples/
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Colors for output

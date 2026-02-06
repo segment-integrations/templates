@@ -7,72 +7,84 @@
   "shell": {
     "scripts": {
       "lint": [
-        "shellcheck -S warning devbox/plugins/*/scripts/*.sh"
+        "echo 'Running orchestrated linting and validation...'",
+        "process-compose -f tests/process-compose-lint.yaml --tui=${TEST_TUI:-false}"
       ],
       "lint:android": [
-        "shellcheck -S warning devbox/plugins/android/scripts/*.sh"
+        "shellcheck -S warning plugins/android/scripts/*.sh"
       ],
       "lint:ios": [
-        "shellcheck -S warning devbox/plugins/ios/scripts/*.sh"
+        "shellcheck -S warning plugins/ios/scripts/*.sh"
       ],
       "lint:rn": [
-        "shellcheck -S warning devbox/plugins/react-native/scripts/*.sh"
+        "shellcheck -S warning plugins/react-native/scripts/*.sh"
       ],
       "test:android:lib": [
-        "bash devbox/plugins/tests/android/test-lib.sh"
+        "bash plugins/tests/android/test-lib.sh"
       ],
       "test:android:devices": [
-        "bash devbox/plugins/tests/android/test-devices.sh"
+        "bash plugins/tests/android/test-devices.sh"
+      ],
+      "test:android:device-mgmt": [
+        "bash plugins/tests/android/test-device-mgmt.sh"
+      ],
+      "test:android:validation": [
+        "bash plugins/tests/android/test-validation.sh"
       ],
       "test:android": [
         "devbox run lint:android",
         "devbox run test:android:lib",
-        "devbox run test:android:devices"
+        "devbox run test:android:devices",
+        "devbox run test:android:device-mgmt",
+        "devbox run test:android:validation"
       ],
       "test:ios:lib": [
-        "sh devbox/plugins/tests/ios/test-lib.sh"
+        "sh plugins/tests/ios/test-lib.sh"
+      ],
+      "test:ios:device-mgmt": [
+        "bash plugins/tests/ios/test-device-mgmt.sh"
+      ],
+      "test:ios:cache": [
+        "bash plugins/tests/ios/test-cache.sh"
       ],
       "test:ios": [
         "devbox run lint:ios",
-        "devbox run test:ios:lib"
+        "devbox run test:ios:lib",
+        "devbox run test:ios:device-mgmt",
+        "devbox run test:ios:cache"
       ],
       "test:rn": [
         "devbox run lint:rn"
       ],
       "test:unit": [
-        "devbox run test:android",
-        "devbox run test:ios",
-        "devbox run test:rn"
+        "echo 'Running orchestrated unit tests...'",
+        "process-compose -f tests/process-compose-unit-tests.yaml --tui=${TEST_TUI:-false}"
       ],
       "test:e2e:android": [
-        "bash devbox/tests/e2e-android.sh"
+        "bash tests/e2e-android-orchestrated.sh"
       ],
       "test:e2e:ios": [
-        "bash devbox/tests/e2e-ios.sh"
+        "bash tests/e2e-ios-orchestrated.sh"
       ],
       "test:e2e:rn": [
-        "bash devbox/tests/e2e-react-native.sh"
+        "bash tests/e2e-react-native-orchestrated.sh"
       ],
       "test:e2e": [
-        "bash devbox/tests/e2e-sequential.sh"
+        "echo 'Running orchestrated E2E tests (sequential)...'",
+        "process-compose -f tests/process-compose-e2e.yaml --tui=${TEST_TUI:-false}"
+      ],
+      "test:e2e:sequential": [
+        "bash tests/e2e-sequential.sh"
       ],
       "test:e2e:parallel": [
-        "bash devbox/tests/e2e-all.sh"
+        "bash tests/e2e-all.sh"
       ],
       "test": [
         "echo '========================================'",
-        "echo 'Running all plugin tests'",
+        "echo 'Running ALL tests (lint, unit, workflows, e2e)'",
         "echo '========================================'",
         "echo ''",
-        "devbox run lint",
-        "echo ''",
-        "devbox run test:unit",
-        "echo ''",
-        "echo '========================================'",
-        "echo '✓ All tests passed!'",
-        "echo '========================================'",
-        "echo ''",
-        "echo 'Run \"devbox run test:e2e\" for E2E tests'"
+        "process-compose -f tests/process-compose-all-tests.yaml --tui=${TEST_TUI:-false}"
       ],
       "check:workflows": [
         "for f in .github/workflows/*.yml; do",
@@ -84,23 +96,23 @@
         "echo 'Syncing example projects with latest plugins...'",
         "echo ''",
         "echo '1/3 Android...'",
-        "(cd devbox/examples/android && rm -rf .devbox devbox.d devbox.lock && devbox install)",
+        "(cd examples/android && rm -rf .devbox devbox.d devbox.lock && devbox install)",
         "echo '    Generating device lock file...'",
-        "(cd devbox/examples/android && devbox run android.sh devices eval > /dev/null)",
+        "(cd examples/android && devbox run android.sh devices eval > /dev/null)",
         "echo '  ✓ Android synced'",
         "echo ''",
         "echo '2/3 iOS...'",
-        "(cd devbox/examples/ios && rm -rf .devbox devbox.d devbox.lock && devbox install)",
+        "(cd examples/ios && rm -rf .devbox devbox.d devbox.lock && devbox install)",
         "echo '    Generating device lock file...'",
-        "(cd devbox/examples/ios && devbox run ios.sh devices eval > /dev/null)",
+        "(cd examples/ios && devbox run ios.sh devices eval > /dev/null)",
         "echo '  ✓ iOS synced'",
         "echo ''",
         "echo '3/3 React Native...'",
-        "(cd devbox/examples/react-native && rm -rf .devbox devbox.d devbox.lock && devbox install)",
+        "(cd examples/react-native && rm -rf .devbox devbox.d devbox.lock && devbox install)",
         "echo '    Generating Android lock file...'",
-        "(cd devbox/examples/react-native && devbox run android.sh devices eval > /dev/null)",
+        "(cd examples/react-native && devbox run android.sh devices eval > /dev/null)",
         "echo '    Generating iOS lock file...'",
-        "(cd devbox/examples/react-native && devbox run ios.sh devices eval > /dev/null)",
+        "(cd examples/react-native && devbox run ios.sh devices eval > /dev/null)",
         "echo '  ✓ React Native synced'",
         "echo ''",
         "echo '✓ All examples synced successfully!'"

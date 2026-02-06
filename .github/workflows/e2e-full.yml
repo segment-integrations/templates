@@ -25,7 +25,7 @@ concurrency:
 
 jobs:
   android-e2e:
-    name: Android E2E - ${{ matrix.device }}
+    name: Android E2E (Orchestrated) - ${{ matrix.device }}
     if: ${{ github.event_name == 'schedule' || inputs.run_android }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -40,22 +40,21 @@ jobs:
         uses: ./.github/actions/setup-android-ci
         with:
           device: ${{ matrix.device }}
-          working-directory: devbox/examples/android
+          working-directory: examples/android
 
       - name: Install Devbox
         uses: jetify-com/devbox-install-action@v0.14.0
         with:
           enable-cache: true
 
-      - name: Build Android app
-        working-directory: devbox/examples/android
-        run: devbox run --pure build-android
-
-      - name: Run Android E2E tests
-        working-directory: devbox/examples/android
+      - name: Run orchestrated Android E2E test
+        working-directory: examples/android
         env:
           EMU_HEADLESS: 1
-        run: devbox run --pure test-android-e2e ${{ matrix.device }}
+          BOOT_TIMEOUT: 240
+          TEST_TIMEOUT: 600
+          ANDROID_DEFAULT_DEVICE: ${{ matrix.device }}
+        run: bash ../../tests/e2e-android-orchestrated.sh
 
       - name: Upload logs
         if: failure()
@@ -63,12 +62,13 @@ jobs:
         with:
           name: android-${{ matrix.device }}-logs
           path: |
-            devbox/examples/android/app/build/outputs/
-            devbox/examples/android/build/
+            /tmp/android-e2e-logs/
+            examples/android/app/build/outputs/
+            examples/android/build/
           retention-days: 7
 
   ios-e2e:
-    name: iOS E2E - ${{ matrix.device }}
+    name: iOS E2E (Orchestrated) - ${{ matrix.device }}
     if: ${{ github.event_name == 'schedule' || inputs.run_ios }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
@@ -91,15 +91,14 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Build iOS app
-        working-directory: devbox/examples/ios
-        run: devbox run --pure build-ios
-
-      - name: Run iOS E2E tests
-        working-directory: devbox/examples/ios
+      - name: Run orchestrated iOS E2E test
+        working-directory: examples/ios
         env:
           SIM_HEADLESS: 1
-        run: devbox run --pure test-ios-e2e ${{ matrix.device }}
+          BOOT_TIMEOUT: 180
+          TEST_TIMEOUT: 600
+          IOS_DEFAULT_DEVICE: ${{ matrix.device }}
+        run: bash ../../tests/e2e-ios-orchestrated.sh
 
       - name: Upload logs
         if: failure()
@@ -107,64 +106,12 @@ jobs:
         with:
           name: ios-${{ matrix.device }}-logs
           path: |
+            /tmp/ios-e2e-logs/
             ~/Library/Logs/CoreSimulator/
           retention-days: 7
 
-  react-native-android-e2e:
-    name: React Native Android E2E - ${{ matrix.device }}
-    if: ${{ github.event_name == 'schedule' || inputs.run_react_native }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      matrix:
-        device: [min, max]
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js with cache
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: devbox/examples/react-native/package-lock.json
-
-      - name: Setup Android CI
-        uses: ./.github/actions/setup-android-ci
-        with:
-          device: ${{ matrix.device }}
-          working-directory: devbox/examples/react-native
-
-      - name: Install Devbox
-        uses: jetify-com/devbox-install-action@v0.14.0
-        with:
-          enable-cache: true
-
-      - name: Install Node dependencies
-        working-directory: devbox/examples/react-native
-        run: npm install
-
-      - name: Build React Native app
-        working-directory: devbox/examples/react-native
-        run: devbox run --pure build-android
-
-      - name: Run React Native E2E tests
-        working-directory: devbox/examples/react-native
-        env:
-          EMU_HEADLESS: 1
-        run: devbox run --pure test-android-e2e ${{ matrix.device }}
-
-      - name: Upload logs
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: react-native-android-${{ matrix.device }}-logs
-          path: |
-            devbox/examples/react-native/android/app/build/outputs/
-          retention-days: 7
-
-  react-native-ios-e2e:
-    name: React Native iOS E2E - ${{ matrix.device }}
+  react-native-e2e:
+    name: React Native E2E (Orchestrated) - ${{ matrix.platform }}-${{ matrix.device }}
     if: ${{ github.event_name == 'schedule' || inputs.run_react_native }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
@@ -172,9 +119,19 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - device: min
+          # Android tests
+          - platform: android
+            device: min
+            os: ubuntu-24.04
+          - platform: android
+            device: max
+            os: ubuntu-24.04
+          # iOS tests
+          - platform: ios
+            device: min
             os: macos-14
-          - device: max
+          - platform: ios
+            device: max
             os: macos-15
     steps:
       - uses: actions/checkout@v4
@@ -184,9 +141,17 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: devbox/examples/react-native/package-lock.json
+          cache-dependency-path: examples/react-native/package-lock.json
+
+      - name: Setup Android CI
+        if: matrix.platform == 'android'
+        uses: ./.github/actions/setup-android-ci
+        with:
+          device: ${{ matrix.device }}
+          working-directory: examples/react-native
 
       - name: Setup iOS CI
+        if: matrix.platform == 'ios'
         uses: ./.github/actions/setup-ios-ci
 
       - name: Install Devbox
@@ -194,49 +159,50 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Install Node dependencies
-        working-directory: devbox/examples/react-native
-        run: npm install
-
-      - name: Build React Native app
-        working-directory: devbox/examples/react-native
-        run: devbox run --pure build-ios
-
-      - name: Run React Native E2E tests
-        working-directory: devbox/examples/react-native
+      - name: Run orchestrated React Native E2E test
+        working-directory: examples/react-native
         env:
-          SIM_HEADLESS: 1
-        run: devbox run --pure test-ios-e2e ${{ matrix.device }}
+          EMU_HEADLESS: ${{ matrix.platform == 'android' && '1' || '0' }}
+          SIM_HEADLESS: ${{ matrix.platform == 'ios' && '1' || '0' }}
+          BOOT_TIMEOUT: 240
+          TEST_TIMEOUT: 900
+          ANDROID_DEFAULT_DEVICE: ${{ matrix.device }}
+          IOS_DEFAULT_DEVICE: ${{ matrix.device }}
+        run: bash ../../tests/e2e-react-native-orchestrated.sh
 
       - name: Upload logs
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: react-native-ios-${{ matrix.device }}-logs
+          name: react-native-${{ matrix.platform }}-${{ matrix.device }}-logs
           path: |
-            devbox/examples/react-native/ios/build/
+            /tmp/rn-e2e-logs/
+            examples/react-native/android/app/build/outputs/
+            examples/react-native/ios/build/
             ~/Library/Logs/CoreSimulator/
           retention-days: 7
 
   e2e-summary:
     name: E2E Test Summary
     runs-on: ubuntu-latest
-    needs: [android-e2e, ios-e2e, react-native-android-e2e, react-native-ios-e2e]
+    needs: [android-e2e, ios-e2e, react-native-e2e]
     if: always()
     steps:
       - name: Check results
         run: |
-          echo "Android E2E: ${{ needs.android-e2e.result }}"
-          echo "iOS E2E: ${{ needs.ios-e2e.result }}"
-          echo "React Native Android E2E: ${{ needs.react-native-android-e2e.result }}"
-          echo "React Native iOS E2E: ${{ needs.react-native-ios-e2e.result }}"
+          echo "📊 E2E Test Results:"
+          echo "  Android E2E: ${{ needs.android-e2e.result }}"
+          echo "  iOS E2E: ${{ needs.ios-e2e.result }}"
+          echo "  React Native E2E: ${{ needs.react-native-e2e.result }}"
+          echo ""
 
           if [[ "${{ needs.android-e2e.result }}" != "success" ]] || \
              [[ "${{ needs.ios-e2e.result }}" != "success" ]] || \
-             [[ "${{ needs.react-native-android-e2e.result }}" != "success" ]] || \
-             [[ "${{ needs.react-native-ios-e2e.result }}" != "success" ]]; then
+             [[ "${{ needs.react-native-e2e.result }}" != "success" ]]; then
             echo "::error::One or more E2E test suites failed"
+            echo "::error::Check the individual job logs for details"
+            echo "::error::Orchestrated logs available in artifacts: /tmp/*-e2e-logs/"
             exit 1
           fi
 
-          echo "::notice::All E2E tests passed successfully!"
+          echo "::notice::✅ All orchestrated E2E tests passed successfully!"

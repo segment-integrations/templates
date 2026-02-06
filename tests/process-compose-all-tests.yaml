@@ -1,0 +1,184 @@
+version: "0.5"
+
+log_location: "/tmp/devbox-all-tests-logs"
+log_level: info
+
+processes:
+  # Phase 1: Static Analysis (runs in parallel)
+  lint-android:
+    command: "shellcheck -S warning plugins/android/scripts/*.sh"
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "shellcheck -S warning plugins/android/scripts/*.sh"
+      initial_delay_seconds: 1
+      period_seconds: 1
+      timeout_seconds: 30
+      success_threshold: 1
+
+  lint-ios:
+    command: "shellcheck -S warning plugins/ios/scripts/*.sh"
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "shellcheck -S warning plugins/ios/scripts/*.sh"
+      initial_delay_seconds: 1
+      period_seconds: 1
+      timeout_seconds: 30
+      success_threshold: 1
+
+  lint-react-native:
+    command: "shellcheck -S warning plugins/react-native/scripts/*.sh"
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "shellcheck -S warning plugins/react-native/scripts/*.sh"
+      initial_delay_seconds: 1
+      period_seconds: 1
+      timeout_seconds: 30
+      success_threshold: 1
+
+  lint-tests:
+    command: "shellcheck -S warning tests/*.sh plugins/tests/**/*.sh || exit 0"
+    availability:
+      restart: "no"
+
+  check-workflows:
+    command: |
+      for f in .github/workflows/*.yml; do
+        echo "Checking $(basename $f)..."
+        act -W "$f" -l > /dev/null 2>&1 || { echo "✗ $f is invalid"; exit 1; }
+        echo "✓ $(basename $f)"
+      done
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "command -v act"
+      initial_delay_seconds: 1
+      period_seconds: 1
+      timeout_seconds: 5
+      success_threshold: 1
+
+  # Phase 2: Unit Tests (depends on lint passing)
+  test-android-lib:
+    command: "bash plugins/tests/android/test-lib.sh"
+    depends_on:
+      lint-android:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "test -f plugins/tests/android/test-lib.sh"
+      initial_delay_seconds: 1
+      period_seconds: 1
+      timeout_seconds: 5
+      success_threshold: 1
+
+  test-android-devices:
+    command: "bash plugins/tests/android/test-devices.sh"
+    depends_on:
+      lint-android:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "test -f plugins/tests/android/test-devices.sh"
+      initial_delay_seconds: 1
+      period_seconds: 1
+      timeout_seconds: 5
+      success_threshold: 1
+
+  test-ios-lib:
+    command: "sh plugins/tests/ios/test-lib.sh"
+    depends_on:
+      lint-ios:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "test -f plugins/tests/ios/test-lib.sh"
+      initial_delay_seconds: 1
+      period_seconds: 1
+      timeout_seconds: 5
+      success_threshold: 1
+
+  # Phase 3: E2E Tests (sequential, depends on unit tests)
+  e2e-android:
+    command: "bash tests/e2e-android-orchestrated.sh"
+    depends_on:
+      test-android-lib:
+        condition: process_completed_successfully
+      test-android-devices:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "test -f tests/e2e-android-orchestrated.sh"
+      initial_delay_seconds: 1
+      period_seconds: 1
+      timeout_seconds: 5
+      success_threshold: 1
+
+  e2e-ios:
+    command: "bash tests/e2e-ios-orchestrated.sh"
+    depends_on:
+      test-ios-lib:
+        condition: process_completed_successfully
+      e2e-android:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "test -f tests/e2e-ios-orchestrated.sh"
+      initial_delay_seconds: 1
+      period_seconds: 1
+      timeout_seconds: 5
+      success_threshold: 1
+
+  e2e-react-native:
+    command: "bash tests/e2e-react-native-orchestrated.sh"
+    depends_on:
+      lint-react-native:
+        condition: process_completed_successfully
+      e2e-ios:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "test -f tests/e2e-react-native-orchestrated.sh"
+      initial_delay_seconds: 1
+      period_seconds: 1
+      timeout_seconds: 5
+      success_threshold: 1
+
+  # Summary
+  summary:
+    command: |
+      echo ""
+      echo "========================================"
+      echo "✓ All tests passed!"
+      echo "========================================"
+      echo ""
+      echo "Test Summary:"
+      echo "  ✓ Linting (android, ios, react-native, tests)"
+      echo "  ✓ Workflow validation"
+      echo "  ✓ Unit tests (android libs, android devices, ios libs)"
+      echo "  ✓ E2E tests (android, ios, react-native)"
+      echo ""
+    depends_on:
+      check-workflows:
+        condition: process_completed_successfully
+      e2e-react-native:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"

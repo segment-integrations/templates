@@ -1,0 +1,114 @@
+version: "0.5"
+
+environment:
+  - "IOS_DEVICE=${IOS_DEFAULT_DEVICE:-max}"
+  - "TEST_TIMEOUT=300"
+  - "BOOT_TIMEOUT=120"
+
+log_location: "/tmp/ios-e2e-logs"
+log_level: info
+
+processes:
+  # Phase 1: Verify simulator exists
+  verify-simulator:
+    command: "xcrun simctl list devices | grep -q ${IOS_DEVICE}"
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "xcrun simctl list devices | grep -q ${IOS_DEVICE}"
+      initial_delay_seconds: 1
+      period_seconds: 2
+      timeout_seconds: 10
+      success_threshold: 1
+
+  # Phase 2: Build app - can run independently
+  build-app:
+    command: "devbox run --pure build:ios"
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "test -d ${IOS_APP_ARTIFACT:-.devbox/virtenv/ios/DerivedData/Build/Products/Debug-iphonesimulator/*.app}"
+      initial_delay_seconds: 5
+      period_seconds: 5
+      timeout_seconds: 300
+      success_threshold: 1
+
+  # Phase 3: Start simulator - depends on verification
+  ios-simulator:
+    command: "devbox run --pure start:sim ${IOS_DEVICE}"
+    depends_on:
+      verify-simulator:
+        condition: process_completed_successfully
+    availability:
+      restart: "on_failure"
+      max_restarts: 2
+    readiness_probe:
+      exec:
+        command: "xcrun simctl list devices | grep ${IOS_DEVICE} | grep -q '(Booted)'"
+      initial_delay_seconds: 5
+      period_seconds: 3
+      timeout_seconds: 120
+      success_threshold: 1
+      failure_threshold: 3
+    liveness_probe:
+      exec:
+        command: "xcrun simctl list devices | grep ${IOS_DEVICE} | grep -q '(Booted)'"
+      initial_delay_seconds: 10
+      period_seconds: 10
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 3
+    shutdown:
+      command: "devbox run --pure stop:sim"
+      timeout_seconds: 30
+
+  # Phase 4: Deploy app - depends on both build and simulator
+  deploy-app:
+    command: "devbox run --pure start:ios ${IOS_DEVICE}"
+    depends_on:
+      build-app:
+        condition: process_completed_successfully
+      ios-simulator:
+        condition: process_healthy
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: |
+          DEVICE_UDID=$(xcrun simctl list devices | grep ${IOS_DEVICE} | grep -oE '[0-9A-F-]{36}' | head -1)
+          xcrun simctl get_app_container "$DEVICE_UDID" "${IOS_APP_BUNDLE_ID:-com.example.ios}" >/dev/null 2>&1
+      initial_delay_seconds: 5
+      period_seconds: 3
+      timeout_seconds: 60
+      success_threshold: 1
+
+  # Phase 5: Verify app is running
+  verify-app-running:
+    command: |
+      DEVICE_UDID=$(xcrun simctl list devices | grep ${IOS_DEVICE} | grep -oE '[0-9A-F-]{36}' | head -1)
+      xcrun simctl spawn "$DEVICE_UDID" launchctl list | grep -q "${IOS_APP_BUNDLE_ID:-com.example.ios}"
+    depends_on:
+      deploy-app:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: |
+          DEVICE_UDID=$(xcrun simctl list devices | grep ${IOS_DEVICE} | grep -oE '[0-9A-F-]{36}' | head -1)
+          xcrun simctl spawn "$DEVICE_UDID" launchctl list | grep -q "${IOS_APP_BUNDLE_ID:-com.example.ios}"
+      initial_delay_seconds: 2
+      period_seconds: 3
+      timeout_seconds: 30
+      success_threshold: 1
+
+  # Cleanup
+  cleanup:
+    command: "echo 'Cleanup complete'"
+    depends_on:
+      verify-app-running:
+        condition: process_completed
+    availability:
+      restart: "no"

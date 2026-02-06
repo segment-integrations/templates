@@ -1,6 +1,16 @@
 # GitHub Actions Workflows
 
-This directory contains comprehensive CI/CD workflows for testing the Devbox mobile plugins and example projects.
+This directory contains comprehensive CI/CD workflows using **orchestrated testing** powered by process-compose for the Devbox mobile plugins and example projects.
+
+## What's New: Orchestrated Testing 🚀
+
+All workflows now use process-compose orchestration with:
+- ✅ **Automatic status checks** - Boot verification, app deployment, process health
+- ✅ **Concurrent execution** - Independent tests run in parallel
+- ✅ **Configurable timeouts** - No infinite hangs (`BOOT_TIMEOUT`, `TEST_TIMEOUT`)
+- ✅ **Better logging** - Per-process logs automatically uploaded to artifacts
+- ✅ **Proper failure handling** - Dependent tasks skip on failure
+- ✅ **Unified approach** - Consistent test methodology across platforms
 
 ## Workflows
 
@@ -8,22 +18,48 @@ This directory contains comprehensive CI/CD workflows for testing the Devbox mob
 
 **Trigger**: Automatically runs on every PR and push to main
 
-**Purpose**: Fast validation to catch issues early (~15-30 minutes)
+**Purpose**: Fast validation to catch issues early (~30-40 minutes)
 
 **What it tests**:
-- Plugin validation tests (Android & iOS)
+- Shellcheck linting + GitHub workflow validation (orchestrated)
+- Plugin unit tests with parallel execution (orchestrated)
 - Device management functionality
 - Cache functionality
-- Quick smoke tests on default devices
+- Quick smoke tests with automatic boot verification (orchestrated)
 
 **Jobs**:
-- `android-plugin-tests`: Android plugin unit tests (ubuntu-24.04)
-- `ios-plugin-tests`: iOS plugin unit tests (macos-15)
-- `android-quick-smoke`: Quick Android emulator lifecycle test (ubuntu-24.04 + KVM)
-- `ios-quick-smoke`: Quick iOS simulator lifecycle test (macos-15)
-- `status-check`: Aggregates results
 
-This workflow is designed to be fast and provide quick feedback to developers.
+1. **lint-and-validate** (ubuntu-24.04, ~10 min)
+   - Uses `devbox run test:lint` (orchestrated)
+   - Shellcheck on all scripts (parallel)
+   - GitHub workflow validation via `act`
+
+2. **android-plugin-tests** (ubuntu-24.04, ~15 min)
+   - Uses `devbox run test:android` (orchestrated)
+   - All Android unit tests run in parallel
+   - Automatic test parallelization
+
+3. **ios-plugin-tests** (macos-15, ~15 min)
+   - Uses `devbox run test:ios` (orchestrated)
+   - All iOS unit tests run in parallel
+   - Automatic test parallelization
+
+4. **android-quick-smoke** (ubuntu-24.04 + KVM, ~30 min)
+   - Uses `tests/e2e-android-orchestrated.sh`
+   - Setup → Build → Boot (verified) → Deploy (verified) → Verify app running
+   - Automatic status checks with 3-second polling
+
+5. **ios-quick-smoke** (macos-15, ~20 min)
+   - Uses `tests/e2e-ios-orchestrated.sh`
+   - Setup → Build → Boot (verified) → Deploy (verified) → Verify app running
+   - Automatic status checks with 3-second polling
+
+6. **android-example-unit-tests**, **ios-unit-tests**, **react-native-unit-tests**
+   - Traditional unit tests (independent of orchestration)
+
+7. **status-check** - Aggregates results from all jobs
+
+This workflow provides fast feedback with **improved reliability** through automatic verification at each stage.
 
 ---
 
@@ -33,7 +69,7 @@ This workflow is designed to be fast and provide quick feedback to developers.
 - Manual dispatch via GitHub Actions UI
 - Weekly schedule (Mondays at 00:00 UTC)
 
-**Purpose**: Comprehensive end-to-end testing across min/max platform versions (~45-60 minutes per job)
+**Purpose**: Comprehensive end-to-end testing with **orchestrated workflows** across min/max platform versions (~45-60 minutes per job)
 
 **Platform Coverage**:
 
@@ -41,25 +77,45 @@ This workflow is designed to be fast and provide quick feedback to developers.
 - **Min**: API 21 (Android 5.0 Lollipop) on ubuntu-24.04
 - **Max**: API 36 (Android 15) on ubuntu-24.04
 - **Hardware Acceleration**: KVM enabled for performance
+- **NEW**: Orchestrated with automatic boot verification
 
 #### iOS
 - **Min**: iOS 15.4 on macos-14 (first Apple Silicon macOS supporting iOS 15.4)
 - **Max**: iOS 26.2 on macos-15 (latest macOS version)
+- **NEW**: Orchestrated with automatic boot verification
 
 #### React Native
-Tests both Android and iOS builds on min/max versions
+- Tests both Android and iOS builds on min/max versions
+- **NEW**: Unified job with platform matrix (was split before)
+- **NEW**: Orchestrated with full status checking
 
 **Jobs**:
-- `android-e2e`: Matrix testing on min/max Android APIs
-- `ios-e2e`: Matrix testing on min/max iOS versions
-- `react-native-e2e`: Full stack testing for React Native apps
-- `e2e-summary`: Aggregates all results
+
+1. **android-e2e** (ubuntu-24.04, ~45 min, matrix: min/max)
+   - Uses `tests/e2e-android-orchestrated.sh`
+   - Full workflow with status verification at each stage
+   - Configurable timeouts: `BOOT_TIMEOUT=240`, `TEST_TIMEOUT=600`
+
+2. **ios-e2e** (macos-14/15, ~45 min, matrix: min/max)
+   - Uses `tests/e2e-ios-orchestrated.sh`
+   - Full workflow with status verification at each stage
+   - Configurable timeouts: `BOOT_TIMEOUT=180`, `TEST_TIMEOUT=600`
+
+3. **react-native-e2e** (ubuntu/macos, ~60 min, matrix: android/ios × min/max)
+   - Uses `tests/e2e-react-native-orchestrated.sh`
+   - Unified job for both platforms
+   - Conditional setup based on platform
+   - Extended timeout: `TEST_TIMEOUT=900`
+
+4. **e2e-summary** - Aggregates all results
 
 **Features**:
-- Parallel execution using matrix strategy
-- Selective execution via workflow inputs
-- Artifact upload on failure for debugging
-- Comprehensive logging
+- ✅ **Parallel execution** using matrix strategy
+- ✅ **Selective execution** via workflow inputs
+- ✅ **Orchestrated testing** with automatic status checks
+- ✅ **Process-compose logs** uploaded on failure
+- ✅ **Configurable timeouts** per test stage
+- ✅ **Proper failure handling** with dependency chaining
 
 ## Running Tests Manually
 
@@ -154,20 +210,61 @@ When a test fails:
 
 1. **Check the job logs** in the Actions tab
 2. **Download artifacts** (uploaded automatically on failure):
-   - Android: Build outputs and logs
-   - iOS: CoreSimulator logs
-   - React Native: Both Android and iOS build outputs
+   - **NEW**: Process-compose logs per process (setup, build, boot, deploy, verify)
+   - Android: `/tmp/android-e2e-logs/`, build outputs
+   - iOS: `/tmp/ios-e2e-logs/`, CoreSimulator logs
+   - React Native: `/tmp/rn-e2e-logs/`, both platforms
 
-3. **Reproduce locally** using the same commands:
+3. **Examine orchestration logs**:
    ```bash
-   # Android example
-   cd devbox/examples/android
-   EMU_HEADLESS=1 devbox run --pure start-emu min
+   # Download and extract artifact
+   tar -xzf android-smoke-logs.tar.gz
 
-   # iOS example
-   cd devbox/examples/ios
-   SIM_HEADLESS=1 devbox run --pure start-sim min
+   # View specific process logs
+   cat /tmp/android-e2e-logs/android-emulator.log  # Boot process
+   cat /tmp/android-e2e-logs/build-app.log         # Build output
+   cat /tmp/android-e2e-logs/deploy-app.log        # Deployment
    ```
+
+4. **Reproduce locally** using orchestrated tests:
+   ```bash
+   # Android E2E (with same timeouts as CI)
+   cd examples/android
+   BOOT_TIMEOUT=240 TEST_TIMEOUT=600 bash ../../tests/e2e-android-orchestrated.sh
+
+   # With interactive TUI for debugging
+   TEST_TUI=true BOOT_TIMEOUT=240 bash ../../tests/e2e-android-orchestrated.sh
+
+   # iOS E2E
+   cd examples/ios
+   BOOT_TIMEOUT=180 TEST_TIMEOUT=600 bash ../../tests/e2e-ios-orchestrated.sh
+
+   # Legacy approach (still works)
+   cd examples/android
+   EMU_HEADLESS=1 devbox run --pure start:emu min
+   ```
+
+### Common Failure Patterns
+
+**Emulator boot timeout:**
+```
+[ERROR] android-emulator failed: readiness probe timeout after 240s
+[INFO] deploy-app skipped: dependency android-emulator not healthy
+```
+→ Check `android-emulator.log`, may need increased `BOOT_TIMEOUT`
+
+**Build failure:**
+```
+[ERROR] build-app failed: exit code 1
+[INFO] deploy-app skipped: dependency build-app not completed successfully
+```
+→ Check `build-app.log` for compilation errors
+
+**App deployment failure:**
+```
+[ERROR] deploy-app failed: readiness probe timeout after 60s
+```
+→ Check `deploy-app.log` for ADB/installation errors
 
 ## Cache Management
 

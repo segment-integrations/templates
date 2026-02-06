@@ -1,0 +1,217 @@
+version: "0.5"
+
+environment:
+  - "ANDROID_SERIAL=emulator-5554"
+  - "IOS_DEVICE=${IOS_DEFAULT_DEVICE:-max}"
+  - "TEST_TIMEOUT=600"
+
+log_location: "/tmp/rn-e2e-logs"
+log_level: info
+
+processes:
+  # Phase 1: Node dependencies and web build (parallel)
+  install-deps:
+    command: "npm install"
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "test -d node_modules"
+      initial_delay_seconds: 2
+      period_seconds: 3
+      timeout_seconds: 120
+      success_threshold: 1
+
+  build-web:
+    command: "devbox run --pure build:web"
+    depends_on:
+      install-deps:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "test -d web/build || test -d build"
+      initial_delay_seconds: 2
+      period_seconds: 3
+      timeout_seconds: 60
+      success_threshold: 1
+
+  # Phase 2: Android workflow
+  setup-android-avd:
+    command: "devbox run --pure android.sh avd setup ${ANDROID_DEFAULT_DEVICE:-max}"
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "test -d ${ANDROID_AVD_HOME}/${ANDROID_DEFAULT_DEVICE:-max}.avd"
+      initial_delay_seconds: 1
+      period_seconds: 2
+      timeout_seconds: 30
+      success_threshold: 1
+
+  build-android:
+    command: "devbox run --pure build:android"
+    depends_on:
+      install-deps:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "test -f android/app/build/outputs/apk/debug/app-debug.apk"
+      initial_delay_seconds: 10
+      period_seconds: 5
+      timeout_seconds: 300
+      success_threshold: 1
+
+  android-emulator:
+    command: "devbox run --pure start:emu ${ANDROID_DEFAULT_DEVICE:-max}"
+    depends_on:
+      setup-android-avd:
+        condition: process_completed_successfully
+    availability:
+      restart: "on_failure"
+      max_restarts: 2
+    readiness_probe:
+      exec:
+        command: "adb -s ${ANDROID_SERIAL} shell getprop sys.boot_completed | grep -q 1"
+      initial_delay_seconds: 10
+      period_seconds: 3
+      timeout_seconds: 180
+      success_threshold: 1
+    liveness_probe:
+      exec:
+        command: "adb devices | grep -q ${ANDROID_SERIAL}"
+      initial_delay_seconds: 15
+      period_seconds: 10
+      timeout_seconds: 5
+      success_threshold: 1
+    shutdown:
+      command: "devbox run --pure stop:emu"
+      timeout_seconds: 30
+
+  deploy-android:
+    command: "devbox run --pure start:android"
+    depends_on:
+      build-android:
+        condition: process_completed_successfully
+      android-emulator:
+        condition: process_healthy
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "adb -s ${ANDROID_SERIAL} shell pm list packages | grep -q com.reactnativeexample"
+      initial_delay_seconds: 5
+      period_seconds: 3
+      timeout_seconds: 60
+      success_threshold: 1
+
+  verify-android:
+    command: "sleep 5 && adb -s ${ANDROID_SERIAL} shell pidof com.reactnativeexample"
+    depends_on:
+      deploy-android:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"
+
+  # Phase 3: iOS workflow (runs after Android cleanup)
+  verify-ios-simulator:
+    command: "xcrun simctl list devices | grep -q ${IOS_DEVICE}"
+    depends_on:
+      verify-android:
+        condition: process_completed
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "xcrun simctl list devices | grep -q ${IOS_DEVICE}"
+      initial_delay_seconds: 1
+      period_seconds: 2
+      timeout_seconds: 10
+      success_threshold: 1
+
+  build-ios:
+    command: "devbox run --pure build:ios"
+    depends_on:
+      install-deps:
+        condition: process_completed_successfully
+      verify-android:
+        condition: process_completed
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "test -d ios/build/Build/Products/Debug-iphonesimulator/ReactNativeExample.app || test -d .devbox/virtenv/ios/DerivedData/Build/Products/Debug-iphonesimulator/ReactNativeExample.app"
+      initial_delay_seconds: 10
+      period_seconds: 5
+      timeout_seconds: 300
+      success_threshold: 1
+
+  ios-simulator:
+    command: "devbox run --pure start:sim ${IOS_DEVICE}"
+    depends_on:
+      verify-ios-simulator:
+        condition: process_completed_successfully
+      android-emulator:
+        condition: process_completed  # Android must be done
+    availability:
+      restart: "on_failure"
+      max_restarts: 2
+    readiness_probe:
+      exec:
+        command: "xcrun simctl list devices | grep ${IOS_DEVICE} | grep -q '(Booted)'"
+      initial_delay_seconds: 5
+      period_seconds: 3
+      timeout_seconds: 120
+      success_threshold: 1
+    liveness_probe:
+      exec:
+        command: "xcrun simctl list devices | grep ${IOS_DEVICE} | grep -q '(Booted)'"
+      initial_delay_seconds: 10
+      period_seconds: 10
+      timeout_seconds: 5
+      success_threshold: 1
+    shutdown:
+      command: "devbox run --pure stop:sim"
+      timeout_seconds: 30
+
+  deploy-ios:
+    command: "devbox run --pure start:ios ${IOS_DEVICE}"
+    depends_on:
+      build-ios:
+        condition: process_completed_successfully
+      ios-simulator:
+        condition: process_healthy
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: |
+          DEVICE_UDID=$(xcrun simctl list devices | grep ${IOS_DEVICE} | grep -oE '[0-9A-F-]{36}' | head -1)
+          xcrun simctl get_app_container "$DEVICE_UDID" "org.reactjs.native.example.ReactNativeExample" >/dev/null 2>&1
+      initial_delay_seconds: 5
+      period_seconds: 3
+      timeout_seconds: 60
+      success_threshold: 1
+
+  verify-ios:
+    command: |
+      sleep 5
+      DEVICE_UDID=$(xcrun simctl list devices | grep ${IOS_DEVICE} | grep -oE '[0-9A-F-]{36}' | head -1)
+      xcrun simctl spawn "$DEVICE_UDID" launchctl list | grep -q "ReactNativeExample"
+    depends_on:
+      deploy-ios:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"
+
+  # Final cleanup
+  cleanup:
+    command: "echo 'All tests complete'"
+    depends_on:
+      verify-ios:
+        condition: process_completed
+    availability:
+      restart: "no"

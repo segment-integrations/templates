@@ -1,0 +1,106 @@
+version: "0.5"
+
+log_location: "/tmp/devbox-unit-tests-logs"
+log_level: info
+
+processes:
+  # Phase 1: Linting (parallel)
+  lint-android:
+    command: "shellcheck -S warning plugins/android/scripts/*.sh"
+    availability:
+      restart: "no"
+
+  lint-ios:
+    command: "shellcheck -S warning plugins/ios/scripts/*.sh"
+    availability:
+      restart: "no"
+
+  lint-react-native:
+    command: "shellcheck -S warning plugins/react-native/scripts/*.sh"
+    availability:
+      restart: "no"
+
+  # Phase 2: Android tests (parallel after lint)
+  test-android-lib:
+    command: "bash plugins/tests/android/test-lib.sh"
+    depends_on:
+      lint-android:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"
+
+  test-android-devices:
+    command: "bash plugins/tests/android/test-devices.sh"
+    depends_on:
+      lint-android:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"
+
+  test-android-device-mgmt:
+    command: "bash plugins/tests/android/test-device-mgmt.sh"
+    depends_on:
+      lint-android:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"
+
+  test-android-validation:
+    command: "bash plugins/tests/android/test-validation.sh"
+    depends_on:
+      lint-android:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"
+
+  # Phase 3: iOS tests (parallel)
+  test-ios-lib:
+    command: "sh plugins/tests/ios/test-lib.sh"
+    depends_on:
+      lint-ios:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"
+
+  test-ios-device-mgmt:
+    command: "bash plugins/tests/ios/test-device-mgmt.sh"
+    depends_on:
+      lint-ios:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"
+
+  test-ios-cache:
+    command: "bash plugins/tests/ios/test-cache.sh"
+    depends_on:
+      lint-ios:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"
+
+  # Summary
+  summary:
+    command: |
+      echo ""
+      echo "========================================"
+      echo "✓ All unit tests passed!"
+      echo "========================================"
+    depends_on:
+      test-android-lib:
+        condition: process_completed_successfully
+      test-android-devices:
+        condition: process_completed_successfully
+      test-android-device-mgmt:
+        condition: process_completed_successfully
+      test-android-validation:
+        condition: process_completed_successfully
+      test-ios-lib:
+        condition: process_completed_successfully
+      test-ios-device-mgmt:
+        condition: process_completed_successfully
+      test-ios-cache:
+        condition: process_completed_successfully
+      lint-react-native:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"

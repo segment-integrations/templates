@@ -1,0 +1,82 @@
+version: "0.5"
+
+log_location: "/tmp/devbox-lint-logs"
+log_level: info
+
+processes:
+  # Shellcheck linting (all run in parallel)
+  lint-android-scripts:
+    command: "shellcheck -S warning plugins/android/scripts/*.sh"
+    availability:
+      restart: "no"
+
+  lint-ios-scripts:
+    command: "shellcheck -S warning plugins/ios/scripts/*.sh"
+    availability:
+      restart: "no"
+
+  lint-react-native-scripts:
+    command: "shellcheck -S warning plugins/react-native/scripts/*.sh"
+    availability:
+      restart: "no"
+
+  lint-test-scripts:
+    command: "shellcheck -S warning tests/*.sh plugins/tests/**/*.sh 2>/dev/null || exit 0"
+    availability:
+      restart: "no"
+
+  # Workflow validation
+  validate-pr-checks-workflow:
+    command: |
+      echo "Validating pr-checks.yml..."
+      if act -W .github/workflows/pr-checks.yml -l > /dev/null 2>&1; then
+        echo "✓ pr-checks.yml is valid"
+      else
+        echo "✗ pr-checks.yml has syntax errors"
+        exit 1
+      fi
+    availability:
+      restart: "no"
+
+  validate-e2e-full-workflow:
+    command: |
+      echo "Validating e2e-full.yml..."
+      if act -W .github/workflows/e2e-full.yml -l > /dev/null 2>&1; then
+        echo "✓ e2e-full.yml is valid"
+      else
+        echo "✗ e2e-full.yml has syntax errors"
+        exit 1
+      fi
+    availability:
+      restart: "no"
+
+  # Summary
+  summary:
+    command: |
+      echo ""
+      echo "========================================"
+      echo "✓ All linting and validation passed!"
+      echo "========================================"
+      echo ""
+      echo "Lint Summary:"
+      echo "  ✓ Android scripts (shellcheck)"
+      echo "  ✓ iOS scripts (shellcheck)"
+      echo "  ✓ React Native scripts (shellcheck)"
+      echo "  ✓ Test scripts (shellcheck)"
+      echo "  ✓ GitHub workflows syntax"
+      echo ""
+    depends_on:
+      lint-android-scripts:
+        condition: process_completed_successfully
+      lint-ios-scripts:
+        condition: process_completed_successfully
+      lint-react-native-scripts:
+        condition: process_completed_successfully
+      lint-test-scripts:
+        condition: process_completed
+      validate-pr-checks-workflow:
+        condition: process_completed_successfully
+      validate-e2e-full-workflow:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"

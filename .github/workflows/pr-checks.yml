@@ -11,8 +11,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  shellcheck:
-    name: Shellcheck Validation
+  lint-and-validate:
+    name: Lint & Workflow Validation
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -23,28 +23,22 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Run shellcheck on all plugins
-        run: devbox run lint-all
+      - name: Run orchestrated linting (shellcheck + workflow validation)
+        run: devbox run test:lint
 
-  android-plugin-unit-tests:
-    name: Android Plugin Unit Tests
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Devbox
-        uses: jetify-com/devbox-install-action@v0.14.0
+      - name: Upload logs
+        if: failure()
+        uses: actions/upload-artifact@v4
         with:
-          enable-cache: true
-
-      - name: Run Android plugin unit tests
-        run: devbox run test-android
+          name: lint-logs
+          path: /tmp/devbox-lint-logs/
+          retention-days: 7
 
   android-plugin-tests:
     name: Android Plugin Tests
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    needs: lint-and-validate
     steps:
       - uses: actions/checkout@v4
 
@@ -69,16 +63,22 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Run Android validation tests
-        run: bash devbox/plugins/tests/android/test-validation.sh
+      - name: Run orchestrated Android plugin tests
+        run: devbox run test:android
 
-      - name: Run Android device management tests
-        run: bash devbox/plugins/tests/android/test-device-mgmt.sh
+      - name: Upload logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-plugin-test-logs
+          path: /tmp/devbox-unit-tests-logs/test-android-*
+          retention-days: 7
 
   ios-plugin-tests:
     name: iOS Plugin Tests
     runs-on: macos-15
     timeout-minutes: 15
+    needs: lint-and-validate
     steps:
       - uses: actions/checkout@v4
 
@@ -106,16 +106,22 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Run iOS device management tests
-        run: bash devbox/plugins/tests/ios/test-device-mgmt.sh
+      - name: Run orchestrated iOS plugin tests
+        run: devbox run test:ios
 
-      - name: Run iOS cache tests
-        run: bash devbox/plugins/tests/ios/test-cache.sh
+      - name: Upload logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-plugin-test-logs
+          path: /tmp/devbox-unit-tests-logs/test-ios-*
+          retention-days: 7
 
   android-quick-smoke:
-    name: Android Quick Smoke Test
+    name: Android Quick Smoke Test (Orchestrated)
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    needs: android-plugin-tests
     steps:
       - uses: actions/checkout@v4
 
@@ -123,31 +129,37 @@ jobs:
         uses: ./.github/actions/setup-android-ci
         with:
           device: min
-          working-directory: devbox/examples/android
+          working-directory: examples/android
 
       - name: Install Devbox
         uses: jetify-com/devbox-install-action@v0.14.0
         with:
           enable-cache: true
 
-      - name: Test Android emulator lifecycle (min device)
-        working-directory: devbox/examples/android
+      - name: Run orchestrated Android E2E test
+        working-directory: examples/android
         env:
           EMU_HEADLESS: 1
-        run: |
-          # Start emulator and wait for boot
-          devbox run --pure start-emu min
+          BOOT_TIMEOUT: 180
+          TEST_TIMEOUT: 300
+          ANDROID_DEFAULT_DEVICE: min
+        run: bash ../../tests/e2e-android-orchestrated.sh
 
-          # Verify emulator is running
-          devbox run --pure android.sh info
-
-          # Clean stop
-          devbox run --pure stop-emu
+      - name: Upload logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-smoke-logs
+          path: |
+            /tmp/android-e2e-logs/
+            examples/android/app/build/outputs/
+          retention-days: 7
 
   ios-quick-smoke:
-    name: iOS Quick Smoke Test
+    name: iOS Quick Smoke Test (Orchestrated)
     runs-on: macos-15
     timeout-minutes: 20
+    needs: ios-plugin-tests
     steps:
       - uses: actions/checkout@v4
 
@@ -159,24 +171,29 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Test iOS simulator lifecycle (default device)
-        working-directory: devbox/examples/ios
+      - name: Run orchestrated iOS E2E test
+        working-directory: examples/ios
         env:
           SIM_HEADLESS: 1
-        run: |
-          # Start simulator and wait for boot
-          devbox run --pure start-sim
+          BOOT_TIMEOUT: 120
+          TEST_TIMEOUT: 300
+        run: bash ../../tests/e2e-ios-orchestrated.sh
 
-          # Verify simulator is running
-          devbox run --pure ios.sh info
-
-          # Clean stop
-          devbox run --pure stop-sim
+      - name: Upload logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-smoke-logs
+          path: |
+            /tmp/ios-e2e-logs/
+            ~/Library/Logs/CoreSimulator/
+          retention-days: 7
 
   android-example-unit-tests:
     name: Android Example Unit Tests
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    needs: lint-and-validate
     steps:
       - uses: actions/checkout@v4
 
@@ -196,13 +213,14 @@ jobs:
           enable-cache: true
 
       - name: Run Android example unit tests
-        working-directory: devbox/examples/android
-        run: devbox run --pure test-android
+        working-directory: examples/android
+        run: devbox run --pure test:android
 
   ios-unit-tests:
     name: iOS Unit Tests
     runs-on: macos-15
     timeout-minutes: 20
+    needs: lint-and-validate
     steps:
       - uses: actions/checkout@v4
 
@@ -221,13 +239,14 @@ jobs:
           enable-cache: true
 
       - name: Run iOS unit tests
-        working-directory: devbox/examples/ios
-        run: devbox run --pure test-ios
+        working-directory: examples/ios
+        run: devbox run --pure test:ios
 
   react-native-unit-tests:
     name: React Native Unit Tests
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    needs: lint-and-validate
     steps:
       - uses: actions/checkout@v4
 
@@ -236,7 +255,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: devbox/examples/react-native/package-lock.json
+          cache-dependency-path: examples/react-native/package-lock.json
 
       - name: Install Devbox
         uses: jetify-com/devbox-install-action@v0.14.0
@@ -244,23 +263,22 @@ jobs:
           enable-cache: true
 
       - name: Install dependencies
-        working-directory: devbox/examples/react-native
-        run: devbox run --pure build-node
+        working-directory: examples/react-native
+        run: devbox run --pure build:node
 
       - name: Run Jest tests
-        working-directory: devbox/examples/react-native
+        working-directory: examples/react-native
         run: npm test -- --coverage
 
   status-check:
     name: All PR Checks Passed
     runs-on: ubuntu-latest
-    needs: [shellcheck, android-plugin-unit-tests, android-plugin-tests, ios-plugin-tests, android-quick-smoke, ios-quick-smoke, android-example-unit-tests, ios-unit-tests, react-native-unit-tests]
+    needs: [lint-and-validate, android-plugin-tests, ios-plugin-tests, android-quick-smoke, ios-quick-smoke, android-example-unit-tests, ios-unit-tests, react-native-unit-tests]
     if: always()
     steps:
       - name: Check job results
         run: |
-          if [[ "${{ needs.shellcheck.result }}" != "success" ]] || \
-             [[ "${{ needs.android-plugin-unit-tests.result }}" != "success" ]] || \
+          if [[ "${{ needs.lint-and-validate.result }}" != "success" ]] || \
              [[ "${{ needs.android-plugin-tests.result }}" != "success" ]] || \
              [[ "${{ needs.ios-plugin-tests.result }}" != "success" ]] || \
              [[ "${{ needs.android-quick-smoke.result }}" != "success" ]] || \
@@ -268,7 +286,7 @@ jobs:
              [[ "${{ needs.android-example-unit-tests.result }}" != "success" ]] || \
              [[ "${{ needs.ios-unit-tests.result }}" != "success" ]] || \
              [[ "${{ needs.react-native-unit-tests.result }}" != "success" ]]; then
-            echo "One or more checks failed"
+            echo "::error::One or more PR checks failed"
             exit 1
           fi
-          echo "All checks passed!"
+          echo "::notice::All PR checks passed!"
