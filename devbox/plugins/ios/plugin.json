@@ -43,7 +43,7 @@
     "{{ .Virtenv }}/scripts/ios-init.sh": "scripts/ios-init.sh",
     "{{ .DevboxDir }}/devices/min.json": "config/devices/min.json",
     "{{ .DevboxDir }}/devices/max.json": "config/devices/max.json",
-    "{{ .DevboxDir }}/devices/devices.lock": "config/devices.lock.json"
+    "{{ .DevboxDir }}/devices/devices.lock": "config/devices/devices.lock"
   },
   "shell": {
     "init_hook": [

@@ -21,7 +21,7 @@ assert_command_success "Device list command succeeds" \
 # Test 2: Device selection and lock file generation
 echo "Test: Device selection..."
 if devbox run --pure ios.sh devices select min >/dev/null 2>&1; then
-  assert_file_exists "devbox.d/ios/devices.lock.json" "Lock file created after select"
+  assert_file_exists "devbox.d/ios/devices/devices.lock" "Lock file created after select"
 else
   echo "✗ Device select command failed"
   ((TEST_FAIL++))
@@ -29,8 +29,8 @@ fi
 
 # Test 3: Lock file structure
 echo "Test: Lock file structure..."
-if [ -f "devbox.d/ios/devices.lock.json" ]; then
-  devices=$(jq -r '.devices | length' devbox.d/ios/devices.lock.json 2>/dev/null || echo "0")
+if [ -f "devbox.d/ios/devices/devices.lock" ]; then
+  devices=$(jq -r '.devices | length' devbox.d/ios/devices/devices.lock 2>/dev/null || echo "0")
   if [ "$devices" -ge 0 ]; then
     ((TEST_PASS++))
     echo "✓ Lock file contains devices array"
@@ -40,7 +40,7 @@ if [ -f "devbox.d/ios/devices.lock.json" ]; then
   fi
 
   # Test 4: Checksum exists
-  checksum=$(jq -r '.checksum // ""' devbox.d/ios/devices.lock.json 2>/dev/null || echo "")
+  checksum=$(jq -r '.checksum // ""' devbox.d/ios/devices/devices.lock 2>/dev/null || echo "")
   if [ -n "$checksum" ]; then
     ((TEST_PASS++))
     echo "✓ Lock file contains checksum"
@@ -50,7 +50,7 @@ if [ -f "devbox.d/ios/devices.lock.json" ]; then
   fi
 
   # Test 5: Timestamp exists
-  timestamp=$(jq -r '.generated_at // ""' devbox.d/ios/devices.lock.json 2>/dev/null || echo "")
+  timestamp=$(jq -r '.generated_at // ""' devbox.d/ios/devices/devices.lock 2>/dev/null || echo "")
   if [ -n "$timestamp" ]; then
     ((TEST_PASS++))
     echo "✓ Lock file contains timestamp"

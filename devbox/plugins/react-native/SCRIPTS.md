@@ -267,14 +267,14 @@ your-react-native-app/
 │   ├── android/         # Android-specific configuration (nested)
 │   │   ├── devices/
 │   │   │   ├── min.json
-│   │   │   └── max.json
-│   │   ├── devices.lock.json
+│   │   │   ├── max.json
+│   │   │   └── devices.lock
 │   │   └── flake.nix
 │   ├── ios/            # iOS-specific configuration (nested)
-│   │   ├── devices/
-│   │   │   ├── min.json
-│   │   │   └── max.json
-│   │   └── devices.lock.json
+│   │   └── devices/
+│   │       ├── min.json
+│   │       ├── max.json
+│   │       └── devices.lock
 │   └── react-native/   # React Native configuration (optional)
 │       └── react-native.json
 ├── .devbox/virtenv/     # Generated config files
@@ -447,8 +447,8 @@ devbox run android.sh devices eval
 devbox run ios.sh devices eval
 
 # Commit both lock files
-git add devbox.d/android/devices.lock.json
-git add devbox.d/ios/devices.lock.json
+git add devbox.d/android/devices/devices.lock
+git add devbox.d/ios/devices/devices.lock
 ```
 
 ### 4. Script Organization

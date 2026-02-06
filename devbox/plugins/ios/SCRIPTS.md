@@ -104,7 +104,7 @@ These scripts are executed directly by users or other scripts:
 
 **Exported Functions:**
 - `ios_validate_xcode()` - Validates Xcode installation on macOS
-- `ios_validate_lock_file()` - Validates devices.lock.json checksum against device definitions
+- `ios_validate_lock_file()` - Validates devices/devices.lock checksum against device definitions
 
 **Validation Philosophy:**
 - Warnings only, never blocks execution
@@ -120,7 +120,7 @@ These scripts are executed directly by users or other scripts:
 
 **`ios_validate_lock_file()` Details:**
 - Computes SHA-256 checksum of device files
-- Compares with checksum in devices.lock.json
+- Compares with checksum in devices/devices.lock
 - Warns if checksums don't match (device definitions changed)
 - Lock file is optional (no warning if missing)
 
@@ -132,7 +132,7 @@ These scripts are executed directly by users or other scripts:
 Warning: Xcode developer directory not found.
 Run 'xcode-select --install' or install Xcode from the App Store.
 
-Warning: devices.lock.json may be stale.
+Warning: devices/devices.lock may be stale.
 Run 'devbox run ios.sh devices eval' to update.
 ```
 
@@ -194,7 +194,7 @@ Commands:
   delete <name>            # Remove device definition
   select <name...>         # Select devices for evaluation
   reset                    # Reset device selection (all)
-  eval                     # Generate devices.lock.json
+  eval                     # Generate devices/devices.lock
 ```
 
 **Key Functions:**
@@ -216,7 +216,7 @@ Commands:
 3. Determines device names:
    - If `EVALUATE_DEVICES` is empty array: "all"
    - Otherwise: comma-separated list of selected devices
-4. Writes `devices.lock.json`:
+4. Writes `devices/devices.lock`:
    ```json
    {
      "devices": ["min", "max"],

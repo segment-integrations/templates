@@ -34,7 +34,7 @@ Three main plugins are located in `devbox/plugins/`:
 - iOS: `{name, runtime}`
 - Default devices: `min.json` and `max.json`
 
-**Lock Files**: `devices.lock.json` optimizes CI by limiting which SDK versions are evaluated
+**Lock Files**: `devices/devices.lock` optimizes CI by limiting which SDK versions are evaluated
 - Generated via `{platform}.sh devices eval`
 - Contains checksums of device definitions for validation
 
