@@ -33,7 +33,7 @@ cd "$TEST_ROOT"
 
 # Test 1: Device list command
 echo "Test: Device listing..."
-if "$IOS_SCRIPTS_DIR/devices.sh" list >/dev/null 2>&1; then
+if sh "$IOS_SCRIPTS_DIR/devices.sh" list >/dev/null 2>&1; then
   ((TEST_PASS++))
   echo "✓ Device list command succeeds"
 else
@@ -43,7 +43,7 @@ fi
 
 # Test 2: Lock file evaluation
 echo "Test: Lock file evaluation..."
-if "$IOS_SCRIPTS_DIR/devices.sh" eval >/dev/null 2>&1; then
+if sh "$IOS_SCRIPTS_DIR/devices.sh" eval >/dev/null 2>&1; then
   assert_file_exists "$IOS_DEVICES_DIR/devices.lock" "Lock file created after eval"
 else
   echo "✗ Device eval command failed"

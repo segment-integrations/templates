@@ -21,6 +21,7 @@ cp "$SCRIPT_DIR/../../fixtures/android/devices/"*.json "$TEST_ROOT/devbox.d/andr
 
 # Copy plugin scripts
 cp -r "$REPO_ROOT/plugins/android/scripts/"* "$TEST_ROOT/devbox.d/android/scripts/"
+chmod +x "$TEST_ROOT/devbox.d/android/scripts/"*.sh
 
 # Set environment for tests
 export ANDROID_CONFIG_DIR="$TEST_ROOT/devbox.d/android"
@@ -34,7 +35,7 @@ cd "$TEST_ROOT"
 
 # Test 1: Lock file generation
 echo "Test: Lock file generation..."
-if "$ANDROID_SCRIPTS_DIR/devices.sh" eval >/dev/null 2>&1; then
+if sh "$ANDROID_SCRIPTS_DIR/devices.sh" eval >/dev/null 2>&1; then
   if [ -f "$ANDROID_DEVICES_DIR/devices.lock" ]; then
     ((TEST_PASS++))
     echo "✓ Lock file generated successfully"
@@ -85,7 +86,7 @@ fi
 
 # Test 4: Device list shows fixtures
 echo "Test: Device list validation..."
-device_list=$("$ANDROID_SCRIPTS_DIR/devices.sh" list 2>/dev/null || echo "")
+device_list=$(sh "$ANDROID_SCRIPTS_DIR/devices.sh" list 2>/dev/null || echo "")
 if echo "$device_list" | grep -q "test_pixel"; then
   ((TEST_PASS++))
   echo "✓ Device list shows test devices"

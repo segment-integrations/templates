@@ -40,7 +40,7 @@ cd "$TEST_ROOT"
 
 # Test 1: Lock file generation
 echo "Test: Lock file generation..."
-if "$IOS_SCRIPTS_DIR/devices.sh" eval >/dev/null 2>&1; then
+if sh "$IOS_SCRIPTS_DIR/devices.sh" eval >/dev/null 2>&1; then
   if [ -f "$IOS_DEVICES_DIR/devices.lock" ]; then
     ((TEST_PASS++))
     echo "✓ Lock file generated successfully"
@@ -101,7 +101,7 @@ fi
 
 # Test 5: Device list shows fixtures
 echo "Test: Device list validation..."
-device_list=$("$IOS_SCRIPTS_DIR/devices.sh" list 2>/dev/null || echo "")
+device_list=$(sh "$IOS_SCRIPTS_DIR/devices.sh" list 2>/dev/null || echo "")
 if echo "$device_list" | grep -q "test_iphone"; then
   ((TEST_PASS++))
   echo "✓ Device list shows test devices"

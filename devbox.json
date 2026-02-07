@@ -117,29 +117,31 @@
         "devbox run test:plugin:ios"
       ],
       "test:integration:android:device-mgmt": [
-        "bash tests/integration/android/test-device-mgmt.sh"
+        "/bin/bash tests/integration/android/test-device-mgmt.sh"
       ],
       "test:integration:android:validation": [
-        "bash tests/integration/android/test-validation.sh"
+        "/bin/bash tests/integration/android/test-validation.sh"
       ],
       "test:integration:android": [
-        "devbox run test:integration:android:device-mgmt",
-        "devbox run test:integration:android:validation"
+        "/bin/bash tests/integration/android/test-device-mgmt.sh",
+        "/bin/bash tests/integration/android/test-validation.sh"
       ],
       "test:integration:ios:device-mgmt": [
-        "bash tests/integration/ios/test-device-mgmt.sh"
+        "/bin/bash tests/integration/ios/test-device-mgmt.sh"
       ],
       "test:integration:ios:cache": [
-        "bash tests/integration/ios/test-cache.sh"
+        "/bin/bash tests/integration/ios/test-cache.sh"
       ],
       "test:integration:ios": [
-        "devbox run test:integration:ios:device-mgmt",
-        "devbox run test:integration:ios:cache"
+        "/bin/bash tests/integration/ios/test-device-mgmt.sh",
+        "/bin/bash tests/integration/ios/test-cache.sh"
       ],
       "test:integration": [
         "echo 'Running integration tests...'",
-        "devbox run test:integration:android",
-        "devbox run test:integration:ios"
+        "/bin/bash tests/integration/android/test-device-mgmt.sh",
+        "/bin/bash tests/integration/android/test-validation.sh",
+        "/bin/bash tests/integration/ios/test-device-mgmt.sh",
+        "/bin/bash tests/integration/ios/test-cache.sh"
       ],
       "test:fast": [
         "echo 'Running fast tests (lint + unit + integration)...' ",

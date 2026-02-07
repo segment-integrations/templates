@@ -52,6 +52,28 @@ Three main plugins are located in `plugins/`:
 
 ## Common Commands
 
+### Devbox CLI Usage
+
+**IMPORTANT:**
+- `devbox run` executes commands/scripts (can run ANY binary in PATH, not just devbox.json scripts)
+- `devbox shell` starts interactive shell (NOT for running commands)
+
+```bash
+# Execute commands (preferred)
+devbox run test                    # Run script from devbox.json
+devbox run android.sh devices list # Run any binary in PATH
+devbox run --pure pytest tests/    # Isolated environment
+devbox run --list                  # List available scripts
+
+# Interactive shell (for exploration only)
+devbox shell                       # Enter shell with packages
+
+# Package management
+devbox add python@3.11             # Add package
+devbox list                        # List packages
+devbox init                        # Create devbox.json
+```
+
 ### Setup
 ```bash
 # Install devbox dependencies
