@@ -1,5 +1,51 @@
 # Plugin Configuration Conventions
 
+## Plugin Directory Structure
+
+Plugins follow a strict directory organization to separate user-facing configuration from internal plugin implementation:
+
+### `config/` - User Configuration Only
+The `config/` directory contains **only** files that are copied to the user's project directory (`devbox.d/{platform}`). This is user-facing configuration that users can modify.
+
+**Allowed in config/:**
+- `devices/` - Default device definitions (min.json, max.json)
+- Any other user-editable configuration files
+
+**NOT allowed in config/:**
+- Internal plugin files (flake.nix, scripts, tests)
+- Process management files (process-compose.yaml)
+- Test suites (test-suite.yaml)
+- Generated files (android.json, devices.lock.json)
+
+### Plugin Root - Internal Files
+Internal plugin files that get copied to `.devbox/virtenv/{platform}` should be at the plugin root or in their respective directories:
+
+```
+plugins/{platform}/
+├── config/
+│   └── devices/          # User config → devbox.d/{platform}/devices/
+│       ├── min.json
+│       └── max.json
+├── scripts/              # Plugin scripts → .devbox/virtenv/{platform}/scripts/
+│   ├── lib/
+│   ├── platform/
+│   ├── domain/
+│   ├── user/
+│   └── init/
+├── tests/                # Plugin tests → .devbox/virtenv/{platform}/tests/
+│   ├── test-lib.sh
+│   └── test-devices.sh
+├── flake.nix             # Nix SDK composition → .devbox/virtenv/{platform}/
+├── process-compose.yaml  # Development services → .devbox/virtenv/{platform}/
+├── test-suite.yaml       # E2E test suite → .devbox/virtenv/{platform}/
+├── test-summary.sh       # Test summary script → .devbox/virtenv/{platform}/
+├── plugin.json           # Plugin manifest
+├── README.md             # User documentation
+└── REFERENCE.md          # Complete API reference
+```
+
+**Key principle:** If it goes to `devbox.d`, it belongs in `config/`. If it goes to `.devbox/virtenv`, it belongs at the root or in its functional directory (scripts/, tests/).
+
 ## Environment Variable Naming
 
 All plugins follow these patterns:

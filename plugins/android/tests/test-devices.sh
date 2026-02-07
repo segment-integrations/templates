@@ -24,16 +24,18 @@ echo ""
 # Setup test environment
 test_root="/tmp/android-plugin-device-test-$$"
 mkdir -p "$test_root/devices"
-mkdir -p "$test_root/scripts"
+mkdir -p "$test_root/scripts/lib"
+mkdir -p "$test_root/scripts/platform"
+mkdir -p "$test_root/scripts/domain"
+mkdir -p "$test_root/scripts/user"
 
-# Copy required scripts
+# Copy required scripts with new layer structure
 script_dir="$(cd "$(dirname "$0")" && pwd)"
-cp "$script_dir/../../android/scripts/lib.sh" "$test_root/scripts/"
-cp "$script_dir/../../android/scripts/core.sh" "$test_root/scripts/"
-cp "$script_dir/../../android/scripts/device_config.sh" "$test_root/scripts/"
-cp "$script_dir/../../android/scripts/avd_manager.sh" "$test_root/scripts/"
-cp "$script_dir/../../android/scripts/env.sh" "$test_root/scripts/"
-cp "$script_dir/../../android/scripts/devices.sh" "$test_root/scripts/"
+cp "$script_dir/../../android/scripts/lib/lib.sh" "$test_root/scripts/lib/"
+cp "$script_dir/../../android/scripts/platform/core.sh" "$test_root/scripts/platform/"
+cp "$script_dir/../../android/scripts/platform/device_config.sh" "$test_root/scripts/platform/"
+cp "$script_dir/../../android/scripts/domain/avd.sh" "$test_root/scripts/domain/"
+cp "$script_dir/../../android/scripts/user/devices.sh" "$test_root/scripts/user/"
 
 # Set environment variables (new config approach)
 export ANDROID_CONFIG_DIR="$test_root"
@@ -42,7 +44,7 @@ export ANDROID_SCRIPTS_DIR="$test_root/scripts"
 export ANDROID_DEVICES=""  # Empty = all devices
 export ANDROID_DEFAULT_DEVICE=""
 
-devices_script="$test_root/scripts/devices.sh"
+devices_script="$test_root/scripts/user/devices.sh"
 
 # Test: Create device
 echo "TEST: Create device"

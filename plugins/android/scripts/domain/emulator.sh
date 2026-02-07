@@ -15,12 +15,16 @@ fi
 ANDROID_EMULATOR_LOADED=1
 ANDROID_EMULATOR_LOADED_PID="$$"
 
-# Source dependencies
+# Source dependencies (Layer 1 & 2 only)
 if [ -n "${ANDROID_SCRIPTS_DIR:-}" ]; then
-  . "${ANDROID_SCRIPTS_DIR}/lib.sh"
-  . "${ANDROID_SCRIPTS_DIR}/core.sh"
-  . "${ANDROID_SCRIPTS_DIR}/avd_manager.sh"
+  . "${ANDROID_SCRIPTS_DIR}/lib/lib.sh"
+  . "${ANDROID_SCRIPTS_DIR}/platform/core.sh"
+  . "${ANDROID_SCRIPTS_DIR}/platform/device_config.sh"
 fi
+
+# NOTE: This script should NOT call android_setup_avds directly.
+# Layer 4 (android.sh) is responsible for calling android_setup_avds BEFORE calling android_start_emulator.
+# Layer 3 scripts must be independent of each other.
 
 # Find a running emulator by AVD name
 android_find_running_emulator() {
@@ -88,12 +92,9 @@ android_start_emulator() {
   preferred_port="${EMU_PORT:-5554}"
   avd_to_start=""
 
-  # ---- Setup AVDs ----
-
-  echo "Setting up Android Virtual Devices..."
-  android_setup_avds
-
   # ---- Resolve AVD Name ----
+  # NOTE: android_setup_avds() must be called by the caller (layer 4) BEFORE calling this function
+  # It sets ANDROID_RESOLVED_AVD which we use here
 
   # Priority order: user-specified AVD > resolved AVD from setup > error
   if [ -n "${AVD_NAME:-}" ]; then
@@ -104,7 +105,7 @@ android_start_emulator() {
 
   if [ -z "$avd_to_start" ]; then
     echo "ERROR: No AVD resolved" >&2
-    echo "       Set ANDROID_DEVICE_NAME or AVD_NAME explicitly" >&2
+    echo "       Ensure android_setup_avds() was called first, or set AVD_NAME explicitly" >&2
     exit 1
   fi
 

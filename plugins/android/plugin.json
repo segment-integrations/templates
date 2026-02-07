@@ -39,28 +39,30 @@
   "create_files": {
     "{{ .Virtenv }}/android": "",
     "{{ .Virtenv }}/android/avd": "",
-    "{{ .Virtenv }}/process-compose.yaml": "config/process-compose.yaml",
-    "{{ .Virtenv }}/test-suite.yaml": "config/test-suite.yaml",
-    "{{ .Virtenv }}/scripts/env.sh": "scripts/env.sh",
-    "{{ .Virtenv }}/scripts/lib.sh": "scripts/lib.sh",
-    "{{ .Virtenv }}/scripts/core.sh": "scripts/core.sh",
-    "{{ .Virtenv }}/scripts/device_config.sh": "scripts/device_config.sh",
-    "{{ .Virtenv }}/scripts/avd_manager.sh": "scripts/avd_manager.sh",
-    "{{ .Virtenv }}/scripts/avd_reset.sh": "scripts/avd_reset.sh",
-    "{{ .Virtenv }}/scripts/emulator.sh": "scripts/emulator.sh",
-    "{{ .Virtenv }}/scripts/deploy.sh": "scripts/deploy.sh",
-    "{{ .Virtenv }}/scripts/android.sh": "scripts/android.sh",
-    "{{ .Virtenv }}/scripts/devices.sh": "scripts/devices.sh",
-    "{{ .Virtenv }}/scripts/validate.sh": "scripts/validate.sh",
-    "{{ .Virtenv }}/scripts/android-init.sh": "scripts/android-init.sh",
-    "{{ .Virtenv }}/flake.nix": "config/flake.nix",
+    "{{ .Virtenv }}/process-compose.yaml": "process-compose.yaml",
+    "{{ .Virtenv }}/test-suite.yaml": "test-suite.yaml",
+    "{{ .Virtenv }}/test-summary.sh": "test-summary.sh",
+    "{{ .Virtenv }}/tests/test-lib.sh": "tests/test-lib.sh",
+    "{{ .Virtenv }}/tests/test-devices.sh": "tests/test-devices.sh",
+    "{{ .Virtenv }}/scripts/lib/lib.sh": "scripts/lib/lib.sh",
+    "{{ .Virtenv }}/scripts/platform/core.sh": "scripts/platform/core.sh",
+    "{{ .Virtenv }}/scripts/platform/device_config.sh": "scripts/platform/device_config.sh",
+    "{{ .Virtenv }}/scripts/user/android.sh": "scripts/user/android.sh",
+    "{{ .Virtenv }}/scripts/user/devices.sh": "scripts/user/devices.sh",
+    "{{ .Virtenv }}/flake.nix": "flake.nix",
     "{{ .DevboxDir }}/devices/min.json": "config/devices/min.json",
-    "{{ .DevboxDir }}/devices/max.json": "config/devices/max.json"
+    "{{ .DevboxDir }}/devices/max.json": "config/devices/max.json",
+    "{{ .Virtenv }}/scripts/domain/avd.sh": "scripts/domain/avd.sh",
+    "{{ .Virtenv }}/scripts/domain/avd-reset.sh": "scripts/domain/avd-reset.sh",
+    "{{ .Virtenv }}/scripts/domain/emulator.sh": "scripts/domain/emulator.sh",
+    "{{ .Virtenv }}/scripts/domain/deploy.sh": "scripts/domain/deploy.sh",
+    "{{ .Virtenv }}/scripts/domain/validate.sh": "scripts/domain/validate.sh",
+    "{{ .Virtenv }}/scripts/init/setup.sh": "scripts/init/setup.sh"
   },
   "shell": {
     "init_hook": [
-      "bash {{ .Virtenv }}/scripts/android-init.sh 2>/dev/null || true",
-      ". {{ .Virtenv }}/scripts/env.sh"
+      "bash {{ .Virtenv }}/scripts/init/setup.sh 2>/dev/null || true",
+      ". {{ .Virtenv }}/scripts/init/setup.sh"
     ],
     "scripts": {
       "android:devices:eval": [
@@ -83,22 +85,30 @@
         "gradle connectedAndroidTest",
         "android_stop_emulator"
       ],
+      "test:unit": [
+        "bash {{ .Virtenv }}/tests/test-lib.sh",
+        "bash {{ .Virtenv }}/tests/test-devices.sh"
+      ],
       "test:e2e": [
-        "process-compose -f {{ .Virtenv }}/test-suite.yaml --no-server --tui=${TEST_TUI:-true}"
+        "process-compose -f {{ .Virtenv }}/test-suite.yaml --no-server --tui=${TEST_TUI:-false}"
+      ],
+      "test": [
+        "echo 'Running Android plugin tests...'",
+        "devbox run test:unit",
+        "devbox run test:e2e"
       ],
       "start:emu": [
-        "android_start_emulator \"${1:-}\""
+        "android.sh emulator start \"${1:-}\""
       ],
       "start:android": [
-        "android_deploy_app \"${1-}\""
+        "android.sh deploy \"${1-}\""
       ],
       "stop:emu": [
-        "android_stop_emulator"
+        "android.sh emulator stop"
       ],
       "reset:emu": [
         "echo 'Resetting Android emulators...'",
-        "android_stop_emulator",
-        "android_reset_avds"
+        "android.sh emulator reset"
       ],
       "doctor": [
         "echo 'Android Environment Check'",

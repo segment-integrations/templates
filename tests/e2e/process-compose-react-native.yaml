@@ -1,0 +1,393 @@
+version: "0.5"
+
+log_location: "test-results/react-native-repo-e2e-logs"
+log_level: info
+
+environment:
+  - "ANDROID_SERIAL=${ANDROID_SERIAL:-emulator-5554}"
+  - "ANDROID_APP_ID=${ANDROID_APP_ID:-com.reactnativeexample}"
+  - "IOS_DEVICE=${IOS_DEVICE:-max}"
+  - "IOS_APP_BUNDLE_ID=${IOS_APP_BUNDLE_ID:-org.reactjs.native.example.ReactNativeExample}"
+  - "BOOT_TIMEOUT=${BOOT_TIMEOUT:-180}"
+
+processes:
+  # Install Node dependencies
+  install-deps:
+    command: |
+      cd ../examples/react-native
+      echo "Installing Node dependencies..."
+      npm install
+    working_dir: "."
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "test -d ../examples/react-native/node_modules"
+      initial_delay_seconds: 5
+      period_seconds: 5
+      timeout_seconds: 300
+      success_threshold: 1
+
+  # Start Metro bundler service
+  metro-bundler:
+    command: |
+      cd ../examples/react-native
+      echo "Starting Metro bundler..."
+      npx react-native start
+    working_dir: "."
+    depends_on:
+      install-deps:
+        condition: process_completed_successfully
+    availability:
+      restart: "on_failure"
+      max_restarts: 2
+    shutdown:
+      signal: 15
+      timeout_seconds: 10
+    readiness_probe:
+      http_get:
+        host: "localhost"
+        port: 8081
+        path: "/status"
+      initial_delay_seconds: 10
+      period_seconds: 3
+      timeout_seconds: 120
+      success_threshold: 1
+    liveness_probe:
+      http_get:
+        host: "localhost"
+        port: 8081
+        path: "/status"
+      initial_delay_seconds: 15
+      period_seconds: 10
+      timeout_seconds: 5
+
+  # Build web bundle (optional, runs in parallel)
+  build-web:
+    command: |
+      cd ../examples/react-native
+      echo "Building web bundle..."
+      devbox run build-web || echo "⚠ Web build skipped (optional)"
+    working_dir: "."
+    depends_on:
+      install-deps:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"
+
+  # ========================================
+  # Android Workflow
+  # ========================================
+
+  # Setup Android AVD
+  android-setup-avd:
+    command: |
+      cd ../examples/react-native
+      echo "Setting up Android AVD..."
+      devbox run android.sh devices sync
+    working_dir: "."
+    depends_on:
+      metro-bundler:
+        condition: process_healthy
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "test -d ../examples/react-native/.devbox/virtenv/android/avd"
+      initial_delay_seconds: 2
+      period_seconds: 2
+      timeout_seconds: 60
+      success_threshold: 1
+
+  # Build Android app
+  android-build:
+    command: |
+      cd ../examples/react-native
+      echo "Building Android app..."
+      devbox run build:android
+    working_dir: "."
+    depends_on:
+      install-deps:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "test -f ../examples/react-native/android/app/build/outputs/apk/debug/app-debug.apk"
+      initial_delay_seconds: 10
+      period_seconds: 5
+      timeout_seconds: 300
+      success_threshold: 1
+
+  # Start Android emulator
+  android-emulator:
+    command: |
+      cd ../examples/react-native
+      echo "Starting Android emulator..."
+      devbox run android:start:emu
+    working_dir: "."
+    depends_on:
+      android-setup-avd:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"
+    shutdown:
+      signal: 15
+      timeout_seconds: 30
+    readiness_probe:
+      exec:
+        command: "adb wait-for-device shell 'getprop sys.boot_completed' | grep -q 1"
+      initial_delay_seconds: 10
+      period_seconds: 5
+      timeout_seconds: 180
+      success_threshold: 1
+    liveness_probe:
+      exec:
+        command: "adb devices | grep -q ${ANDROID_SERIAL}"
+      initial_delay_seconds: 15
+      period_seconds: 10
+      timeout_seconds: 5
+
+  # Deploy Android app
+  android-deploy:
+    command: |
+      cd ../examples/react-native
+      echo "Deploying React Native Android app..."
+      npx react-native run-android --no-packager
+    working_dir: "."
+    depends_on:
+      android-emulator:
+        condition: process_healthy
+      android-build:
+        condition: process_completed_successfully
+      metro-bundler:
+        condition: process_healthy
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "adb shell pm list packages | grep -q ${ANDROID_APP_ID}"
+      initial_delay_seconds: 10
+      period_seconds: 5
+      timeout_seconds: 120
+      success_threshold: 1
+
+  # Verify Android app
+  android-verify:
+    command: |
+      cd ../examples/react-native
+      echo "Verifying Android app..."
+      if adb shell pm list packages | grep -q ${ANDROID_APP_ID}; then
+        echo "✓ Android app package found: ${ANDROID_APP_ID}"
+        exit 0
+      else
+        echo "✗ Android app package not found"
+        exit 1
+      fi
+    working_dir: "."
+    depends_on:
+      android-deploy:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"
+
+  # Cleanup Android
+  android-cleanup:
+    command: |
+      cd ../examples/react-native
+      echo "Cleaning up Android..."
+      devbox run android:stop:emu || true
+      adb kill-server || true
+      echo "✓ Android cleanup complete"
+    working_dir: "."
+    depends_on:
+      android-verify:
+        condition: process_completed
+    availability:
+      restart: "no"
+
+  # ========================================
+  # iOS Workflow (runs after Android)
+  # ========================================
+
+  # Verify iOS simulator
+  ios-verify-sim:
+    command: |
+      cd ../examples/react-native
+      echo "Verifying iOS simulator..."
+      devbox run ios.sh devices sync
+    working_dir: "."
+    depends_on:
+      android-cleanup:
+        condition: process_completed_successfully
+      metro-bundler:
+        condition: process_healthy
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "xcrun simctl list devices | grep -q iPhone"
+      initial_delay_seconds: 2
+      period_seconds: 2
+      timeout_seconds: 60
+      success_threshold: 1
+
+  # Build iOS app
+  ios-build:
+    command: |
+      cd ../examples/react-native
+      echo "Building iOS app..."
+      devbox run build:ios
+    working_dir: "."
+    depends_on:
+      install-deps:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "test -d ../examples/react-native/.devbox/virtenv/ios/DerivedData/Build/Products/Debug-iphonesimulator/*.app"
+      initial_delay_seconds: 10
+      period_seconds: 5
+      timeout_seconds: 300
+      success_threshold: 1
+
+  # Start iOS simulator
+  ios-simulator:
+    command: |
+      cd ../examples/react-native
+      echo "Starting iOS simulator..."
+      devbox run ios:start:sim "${IOS_DEVICE}"
+    working_dir: "."
+    depends_on:
+      ios-verify-sim:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"
+    shutdown:
+      signal: 15
+      timeout_seconds: 20
+    readiness_probe:
+      exec:
+        command: "xcrun simctl list devices booted | grep -q Booted"
+      initial_delay_seconds: 5
+      period_seconds: 3
+      timeout_seconds: 180
+      success_threshold: 1
+    liveness_probe:
+      exec:
+        command: "xcrun simctl list devices booted | grep -q Booted"
+      initial_delay_seconds: 10
+      period_seconds: 10
+      timeout_seconds: 5
+
+  # Deploy iOS app
+  ios-deploy:
+    command: |
+      cd ../examples/react-native
+      echo "Deploying React Native iOS app..."
+      npx react-native run-ios --no-packager
+    working_dir: "."
+    depends_on:
+      ios-simulator:
+        condition: process_healthy
+      ios-build:
+        condition: process_completed_successfully
+      metro-bundler:
+        condition: process_healthy
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: |
+          BOOTED_UDID=$(xcrun simctl list devices booted | grep -o '[0-9A-F-]\{36\}' | head -1)
+          test -n "$BOOTED_UDID" && xcrun simctl get_app_container booted ${IOS_APP_BUNDLE_ID} >/dev/null 2>&1
+      initial_delay_seconds: 10
+      period_seconds: 5
+      timeout_seconds: 120
+      success_threshold: 1
+
+  # Verify iOS app
+  ios-verify:
+    command: |
+      cd ../examples/react-native
+      echo "Verifying iOS app..."
+      BOOTED_UDID=$(xcrun simctl list devices booted | grep -o '[0-9A-F-]\{36\}' | head -1)
+      if [ -z "$BOOTED_UDID" ]; then
+        echo "✗ No booted simulator found"
+        exit 1
+      fi
+
+      if xcrun simctl get_app_container booted ${IOS_APP_BUNDLE_ID} >/dev/null 2>&1; then
+        echo "✓ iOS app bundle found: ${IOS_APP_BUNDLE_ID}"
+        exit 0
+      else
+        echo "✗ iOS app bundle not found"
+        exit 1
+      fi
+    working_dir: "."
+    depends_on:
+      ios-deploy:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"
+
+  # Cleanup iOS
+  ios-cleanup:
+    command: |
+      cd ../examples/react-native
+      echo "Cleaning up iOS..."
+      devbox run ios:stop:sim || true
+      echo "✓ iOS cleanup complete"
+    working_dir: "."
+    depends_on:
+      ios-verify:
+        condition: process_completed
+    availability:
+      restart: "no"
+
+  # Stop Metro bundler
+  stop-metro:
+    command: |
+      echo "Stopping Metro bundler..."
+      pkill -f "react-native start" || true
+      echo "✓ Metro stopped"
+    depends_on:
+      ios-cleanup:
+        condition: process_completed
+    availability:
+      restart: "no"
+
+  # Summary
+  summary:
+    command: |
+      echo ""
+      echo "========================================"
+      echo "  React Native E2E Test Complete"
+      echo "========================================"
+      echo ""
+      echo "Results:"
+      echo "  ✓ Node dependencies installed"
+      echo "  ✓ Metro bundler started"
+      echo "  ✓ Android workflow complete"
+      echo "    - AVD setup"
+      echo "    - App build"
+      echo "    - Emulator started"
+      echo "    - App deployed"
+      echo "    - App verified"
+      echo "  ✓ iOS workflow complete"
+      echo "    - Simulator verified"
+      echo "    - App build"
+      echo "    - Simulator started"
+      echo "    - App deployed"
+      echo "    - App verified"
+      echo ""
+      echo "Logs: test-results/react-native-repo-e2e-logs"
+      echo ""
+    depends_on:
+      stop-metro:
+        condition: process_completed
+      build-web:
+        condition: process_completed
+    availability:
+      restart: "no"

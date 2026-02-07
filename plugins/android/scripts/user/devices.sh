@@ -12,11 +12,14 @@
 set -eu
 
 # Source dependencies
+# Layer 1: Pure utilities
+# Layer 2: Platform setup and device config
+# Layer 3: Domain operations (AVD management)
 if [ -n "${ANDROID_SCRIPTS_DIR:-}" ]; then
-  . "${ANDROID_SCRIPTS_DIR}/lib.sh"
-  . "${ANDROID_SCRIPTS_DIR}/core.sh"
-  . "${ANDROID_SCRIPTS_DIR}/device_config.sh"
-  . "${ANDROID_SCRIPTS_DIR}/avd_manager.sh"
+  . "${ANDROID_SCRIPTS_DIR}/lib/lib.sh"
+  . "${ANDROID_SCRIPTS_DIR}/platform/core.sh"
+  . "${ANDROID_SCRIPTS_DIR}/platform/device_config.sh"
+  . "${ANDROID_SCRIPTS_DIR}/domain/avd.sh"
 fi
 
 # ============================================================================

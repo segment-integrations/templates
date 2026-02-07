@@ -15,19 +15,16 @@ fi
 ANDROID_AVD_RESET_LOADED=1
 ANDROID_AVD_RESET_LOADED_PID="$$"
 
-# Source dependencies
+# Source dependencies (Layer 1 & 2 only)
 if [ -n "${ANDROID_SCRIPTS_DIR:-}" ]; then
-  if [ -f "${ANDROID_SCRIPTS_DIR}/lib.sh" ]; then
-    . "${ANDROID_SCRIPTS_DIR}/lib.sh"
+  if [ -f "${ANDROID_SCRIPTS_DIR}/lib/lib.sh" ]; then
+    . "${ANDROID_SCRIPTS_DIR}/lib/lib.sh"
   fi
-  if [ -f "${ANDROID_SCRIPTS_DIR}/core.sh" ]; then
-    . "${ANDROID_SCRIPTS_DIR}/core.sh"
+  if [ -f "${ANDROID_SCRIPTS_DIR}/platform/core.sh" ]; then
+    . "${ANDROID_SCRIPTS_DIR}/platform/core.sh"
   fi
-  if [ -f "${ANDROID_SCRIPTS_DIR}/device_config.sh" ]; then
-    . "${ANDROID_SCRIPTS_DIR}/device_config.sh"
-  fi
-  if [ -f "${ANDROID_SCRIPTS_DIR}/avd_manager.sh" ]; then
-    . "${ANDROID_SCRIPTS_DIR}/avd_manager.sh"
+  if [ -f "${ANDROID_SCRIPTS_DIR}/platform/device_config.sh" ]; then
+    . "${ANDROID_SCRIPTS_DIR}/platform/device_config.sh"
   fi
 fi
 

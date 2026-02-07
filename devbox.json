@@ -22,8 +22,8 @@
       ],
       "test:android": [
         "devbox run lint:android",
-        "devbox run test:plugin:android",
-        "devbox run test:integration:android"
+        "echo 'Running Android plugin tests...'",
+        "cd examples/android && devbox run test"
       ],
       "test:ios:lib": [
         "sh plugins/tests/ios/test-lib.sh"
@@ -41,13 +41,13 @@
         "process-compose -f tests/process-compose-unit-tests.yaml --tui=${TEST_TUI:-false}"
       ],
       "test:e2e:android": [
-        "bash tests/e2e/e2e-android.sh"
+        "cd examples/android && devbox run test:e2e"
       ],
       "test:e2e:ios": [
-        "bash tests/e2e/e2e-ios.sh"
+        "process-compose -f tests/e2e/process-compose-ios.yaml --no-server --tui=${TEST_TUI:-false}"
       ],
       "test:e2e:rn": [
-        "bash tests/e2e/e2e-react-native.sh"
+        "process-compose -f tests/e2e/process-compose-react-native.yaml --no-server --tui=${TEST_TUI:-false}"
       ],
       "test:e2e": [
         "echo 'Running orchestrated E2E tests (sequential)...'",

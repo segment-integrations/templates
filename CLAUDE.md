@@ -74,6 +74,54 @@ devbox list                        # List packages
 devbox init                        # Create devbox.json
 ```
 
+### Using Devbox MCP Tools (Model Context Protocol)
+
+**IMPORTANT: Always prefer devbox-mcp tools over direct Bash commands when available.**
+
+This repository includes a devbox-mcp plugin that provides MCP tools for interacting with devbox. These tools should be your first choice because they:
+- Run commands in the correct devbox environment with all packages available
+- Automatically use the project's `devbox.json` configuration
+- Handle environment variables and PATH correctly
+- Work across different project directories via the `cwd` parameter
+
+**Preferred approach:**
+```javascript
+// Use devbox-mcp tools
+devbox_run({ command: "android.sh devices list", cwd: "/path/to/project" })
+devbox_run({ command: "test", cwd: "/path/to/project" })
+devbox_list({ cwd: "/path/to/project" })
+```
+
+**Avoid when possible:**
+```bash
+# Direct Bash commands run outside devbox environment
+bash -c "cd /path/to/project && android.sh devices list"
+```
+
+**When you need Bash commands, wrap them with devbox_run:**
+```javascript
+// This ensures the command runs in the devbox environment
+devbox_run({
+  command: "bash",
+  args: ["-c", "echo $ANDROID_SDK_ROOT"],
+  cwd: "/path/to/project"
+})
+```
+
+**Available devbox-mcp tools:**
+- `devbox_run` - Execute any command or script in devbox environment
+- `devbox_list` - List installed packages
+- `devbox_add` - Add packages to devbox.json
+- `devbox_info` - Get package information
+- `devbox_search` - Search Nix package registry
+- `devbox_shell_env` - Get environment variables
+- `devbox_init` - Initialize devbox.json
+- `devbox_docs_search` - Search devbox documentation
+- `devbox_docs_list` - List available docs
+- `devbox_docs_read` - Read documentation files
+
+All tools (except `devbox_search`) support the `cwd` parameter to specify which project directory to operate in.
+
 ### Setup
 ```bash
 # Install devbox dependencies
@@ -276,6 +324,30 @@ When modifying plugins:
    - `set -euo pipefail` for safety
    - Non-blocking validation (warn, don't fail)
    - Debug logging via `{PLATFORM}_DEBUG=1`
+
+### Script Layering Architecture
+
+Plugin scripts are organized into strict layers to prevent circular dependencies. **Critical rule**: scripts can only source/depend on scripts from **earlier layers**, never from the same layer or later layers.
+
+```
+scripts/
+├── lib/        # Layer 1: Pure utilities
+├── platform/   # Layer 2: SDK/platform setup
+├── domain/     # Layer 3: Domain operations (AVD, emulator, deploy)
+├── user/       # Layer 4: User-facing CLI
+└── init/       # Layer 5: Environment initialization
+```
+
+**Key principles:**
+- **lib/**: Pure utility functions, no platform-specific logic
+- **platform/**: SDK resolution, PATH setup, device configuration
+- **domain/**: Internal domain operations - atomic, independent, orchestrated by layer 4
+- **user/**: User-facing CLI commands (android.sh, devices.sh) - orchestrates domain operations
+- **init/**: Environment initialization run by devbox hooks
+
+**Critical**: Domain layer scripts cannot call each other. If two domain scripts need the same functionality, that functionality must be moved to the platform or lib layer. The user layer orchestrates multiple domain operations.
+
+See `plugins/android/scripts/LAYERS.md` for complete documentation.
 
 ### Device Management Workflow
 

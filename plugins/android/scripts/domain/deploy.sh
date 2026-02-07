@@ -15,12 +15,14 @@ fi
 ANDROID_DEPLOY_LOADED=1
 ANDROID_DEPLOY_LOADED_PID="$$"
 
-# Source dependencies
+# Source dependencies (Layer 1 & 2 only)
 if [ -n "${ANDROID_SCRIPTS_DIR:-}" ]; then
-  . "${ANDROID_SCRIPTS_DIR}/lib.sh"
-  . "${ANDROID_SCRIPTS_DIR}/core.sh"
-  . "${ANDROID_SCRIPTS_DIR}/emulator.sh"
+  . "${ANDROID_SCRIPTS_DIR}/lib/lib.sh"
+  . "${ANDROID_SCRIPTS_DIR}/platform/core.sh"
 fi
+
+# NOTE: This script assumes the emulator is already running.
+# Layer 4 is responsible for starting the emulator before calling android_deploy_app.
 
 # Run Android project build via devbox
 android_run_build() {
@@ -32,7 +34,7 @@ android_run_build() {
   fi
 
   echo "Building Android project: $project_root"
-  (cd "$project_root" && devbox run --pure build-android)
+  (cd "$project_root" && devbox run --pure build:android)
 }
 
 # Resolve APK path from glob pattern
@@ -238,20 +240,13 @@ android_deploy_app() {
     device_choice="${TARGET_DEVICE:-}"
   fi
 
-  # ---- Regenerate Lock File (if devices CLI available) ----
-
-  if [ -n "${ANDROID_SCRIPTS_DIR:-}" ] && [ -x "${ANDROID_SCRIPTS_DIR%/}/devices.sh" ]; then
-    "${ANDROID_SCRIPTS_DIR%/}/devices.sh" eval >/dev/null 2>&1 || true
-  fi
-
-  # ---- Start Emulator ----
+  # ---- Start Deployment ----
+  # NOTE: Emulator should already be running (started by layer 4)
 
   echo "================================================"
   echo "Android App Deployment"
   echo "================================================"
   echo ""
-
-  android_start_emulator "$device_choice"
 
   # ---- Resolve Project Root ----
 

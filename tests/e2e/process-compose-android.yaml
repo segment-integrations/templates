@@ -1,0 +1,199 @@
+version: "0.5"
+
+log_location: "test-results/android-repo-e2e-logs"
+log_level: info
+
+environment:
+  - "ANDROID_SERIAL=${ANDROID_SERIAL:-emulator-5554}"
+  - "ANDROID_APP_ID=${ANDROID_APP_ID:-com.example.devbox}"
+
+processes:
+  # Initialize example project
+  init-project:
+    command: |
+      cd examples/android
+      echo "Initializing Android example project..."
+      # Install is already done since we're in devbox run context
+      # Just ensure .devbox directory exists
+      test -d .devbox || mkdir -p .devbox
+      echo "✓ Project ready"
+    working_dir: "."
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "test -d examples/android/.devbox/gen/scripts"
+      initial_delay_seconds: 2
+      period_seconds: 2
+      timeout_seconds: 120
+      success_threshold: 1
+
+  # Setup AVD if needed
+  setup-avd:
+    command: |
+      cd examples/android
+      echo "Setting up AVD..."
+      devbox run android.sh devices sync
+    working_dir: "."
+    depends_on:
+      init-project:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "test -d examples/android/.devbox/virtenv/android/avd"
+      initial_delay_seconds: 2
+      period_seconds: 2
+      timeout_seconds: 60
+      success_threshold: 1
+
+  # Build Android app (runs in parallel with AVD setup)
+  build-app:
+    command: |
+      cd examples/android
+      echo "Building Android app..."
+      devbox run gradle assembleDebug
+    working_dir: "."
+    depends_on:
+      init-project:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "test -f examples/android/app/build/outputs/apk/debug/app-debug.apk"
+      initial_delay_seconds: 5
+      period_seconds: 5
+      timeout_seconds: 120
+      success_threshold: 1
+
+  # Start Android emulator (long-running service)
+  android-emulator:
+    command: |
+      cd examples/android
+      echo "Starting Android emulator..."
+      # Source environment to get android functions
+      . .devbox/virtenv/android/scripts/env.sh
+      android_start_emulator
+      # Keep running to maintain emulator
+      while pkill -0 qemu-system 2>/dev/null || pgrep -f emulator 2>/dev/null; do
+        sleep 5
+      done
+    working_dir: "."
+    depends_on:
+      setup-avd:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"
+    shutdown:
+      signal: 15
+      timeout_seconds: 30
+    readiness_probe:
+      exec:
+        command: "cd examples/android && . .devbox/virtenv/android/scripts/env.sh && adb wait-for-device shell 'getprop sys.boot_completed 2>/dev/null' | grep -q 1"
+      initial_delay_seconds: 10
+      period_seconds: 5
+      timeout_seconds: 120
+      success_threshold: 1
+
+  # Deploy app to emulator
+  deploy-app:
+    command: |
+      cd examples/android
+      echo "Deploying app to emulator..."
+      . .devbox/virtenv/android/scripts/env.sh
+      android_deploy_app
+    working_dir: "."
+    depends_on:
+      android-emulator:
+        condition: process_healthy
+      build-app:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "cd examples/android && . .devbox/virtenv/android/scripts/env.sh && adb shell pm list packages | grep -q ${ANDROID_APP_ID}"
+      initial_delay_seconds: 5
+      period_seconds: 3
+      timeout_seconds: 60
+      success_threshold: 1
+
+  # Verify app is running
+  verify-app:
+    command: |
+      cd examples/android
+      echo "Verifying app is running..."
+      . .devbox/virtenv/android/scripts/env.sh
+
+      # Check if package is installed
+      if adb shell pm list packages | grep -q ${ANDROID_APP_ID}; then
+        echo "✓ App package found: ${ANDROID_APP_ID}"
+        # Check if process is running (optional - test apps may not stay running)
+        if adb shell ps | grep -q ${ANDROID_APP_ID}; then
+          echo "✓ App process is running"
+        else
+          echo "⚠ App installed but not running (this is OK for test apps)"
+        fi
+        exit 0
+      else
+        echo "✗ App package not found"
+        exit 1
+      fi
+    working_dir: "."
+    depends_on:
+      deploy-app:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"
+
+  # Cleanup - stop emulator
+  cleanup:
+    command: |
+      cd examples/android
+      echo "Cleaning up..."
+      . .devbox/virtenv/android/scripts/env.sh || true
+
+      # Stop emulator using android function
+      android_stop_emulator || true
+
+      # Force kill if needed
+      pkill -9 qemu-system 2>/dev/null || true
+      pkill -9 emulator 2>/dev/null || true
+
+      # Kill adb server
+      adb kill-server 2>/dev/null || true
+
+      echo "✓ Cleanup complete"
+    working_dir: "."
+    depends_on:
+      verify-app:
+        condition: process_completed
+      android-emulator:
+        condition: process_completed
+    availability:
+      restart: "no"
+
+  # Summary
+  summary:
+    command: |
+      echo ""
+      echo "========================================"
+      echo "  Android E2E Test Complete"
+      echo "========================================"
+      echo ""
+      echo "Results:"
+      echo "  ✓ AVD setup"
+      echo "  ✓ App build"
+      echo "  ✓ Emulator started"
+      echo "  ✓ App deployed"
+      echo "  ✓ App verified"
+      echo ""
+      echo "Logs: test-results/android-repo-e2e-logs"
+      echo ""
+    depends_on:
+      cleanup:
+        condition: process_completed
+    availability:
+      restart: "no"

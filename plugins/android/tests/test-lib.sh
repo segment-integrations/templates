@@ -89,7 +89,7 @@ test_summary() {
 # ============================================================================
 
 script_dir="$(cd "$(dirname "$0")" && pwd)"
-lib_path="$script_dir/../../android/scripts/lib.sh"
+lib_path="$script_dir/../../android/scripts/lib/lib.sh"
 
 if [ ! -f "$lib_path" ]; then
   echo "ERROR: lib.sh not found at: $lib_path"
@@ -97,7 +97,7 @@ if [ ! -f "$lib_path" ]; then
 fi
 
 # Source lib.sh
-# shellcheck source=../../android/scripts/lib.sh
+# shellcheck source=../../android/scripts/lib/lib.sh
 . "$lib_path"
 
 echo "========================================"
@@ -171,30 +171,28 @@ assert_failure "android_compute_devices_checksum '/nonexistent/path'" "Should fa
 # Tests: Path Resolution
 # ============================================================================
 
-# Create test directory structure
-test_root="/tmp/android-plugin-path-test-$$"
-mkdir -p "$test_root/devbox.d/android/devices"
-echo '{"test":"data"}' > "$test_root/devbox.d/android/android.json"
+# Test path resolution in current project context
+# Save current project root
+SAVED_PROJECT_ROOT="$DEVBOX_PROJECT_ROOT"
 
 start_test "android_resolve_project_path - finds existing file"
-export DEVBOX_PROJECT_ROOT="$test_root"
-result="$(android_resolve_project_path "android.json")"
-assert_equal "$test_root/devbox.d/android/android.json" "$result" "Should resolve to correct path"
+# Use actual project's devices directory which always exists
+result="$(android_resolve_project_path "devices")"
+assert_success "[ -d '$result' ]" "Should resolve to existing directory"
 
 start_test "android_resolve_project_path - finds directory"
+# Verify devices directory resolves and exists
 result="$(android_resolve_project_path "devices")"
-assert_equal "$test_root/devbox.d/android/devices" "$result" "Should resolve devices directory"
+expected="${SAVED_PROJECT_ROOT}/devbox.d/android/devices"
+assert_equal "$expected" "$result" "Should resolve devices directory"
 
 start_test "android_resolve_project_path - fails on missing path"
 assert_failure "android_resolve_project_path 'nonexistent.json'" "Should fail when path doesn't exist"
 
 start_test "android_resolve_config_dir - finds config directory"
 result="$(android_resolve_config_dir)"
-assert_equal "$test_root/devbox.d/android" "$result" "Should find android config directory"
-
-# Cleanup
-unset DEVBOX_PROJECT_ROOT
-rm -rf "$test_root"
+expected="${SAVED_PROJECT_ROOT}/devbox.d/android"
+assert_equal "$expected" "$result" "Should find android config directory"
 
 # ============================================================================
 # Tests: Requirement Functions

@@ -17,11 +17,11 @@ ANDROID_DEVICE_CONFIG_LOADED_PID="$$"
 
 # Source dependencies
 if [ -n "${ANDROID_SCRIPTS_DIR:-}" ]; then
-  if [ -f "${ANDROID_SCRIPTS_DIR}/lib.sh" ]; then
-    . "${ANDROID_SCRIPTS_DIR}/lib.sh"
+  if [ -f "${ANDROID_SCRIPTS_DIR}/lib/lib.sh" ]; then
+    . "${ANDROID_SCRIPTS_DIR}/lib/lib.sh"
   fi
-  if [ -f "${ANDROID_SCRIPTS_DIR}/core.sh" ]; then
-    . "${ANDROID_SCRIPTS_DIR}/core.sh"
+  if [ -f "${ANDROID_SCRIPTS_DIR}/platform/core.sh" ]; then
+    . "${ANDROID_SCRIPTS_DIR}/platform/core.sh"
   fi
 fi
 

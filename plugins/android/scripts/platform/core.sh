@@ -16,8 +16,8 @@ ANDROID_CORE_LOADED=1
 ANDROID_CORE_LOADED_PID="$$"
 
 # Source dependencies
-if [ -n "${ANDROID_SCRIPTS_DIR:-}" ] && [ -f "${ANDROID_SCRIPTS_DIR}/lib.sh" ]; then
-  . "${ANDROID_SCRIPTS_DIR}/lib.sh"
+if [ -n "${ANDROID_SCRIPTS_DIR:-}" ] && [ -f "${ANDROID_SCRIPTS_DIR}/lib/lib.sh" ]; then
+  . "${ANDROID_SCRIPTS_DIR}/lib/lib.sh"
 fi
 
 # ============================================================================
@@ -305,10 +305,16 @@ android_setup_path() {
     export PATH
   fi
 
+  # Add user-facing CLI scripts to PATH
   if [ -n "${ANDROID_SCRIPTS_DIR:-}" ] && [ -d "${ANDROID_SCRIPTS_DIR}" ]; then
-    chmod +x "${ANDROID_SCRIPTS_DIR}/"*.sh >/dev/null 2>&1 || true
-    PATH="${ANDROID_SCRIPTS_DIR}:$PATH"
-    export PATH
+    # Make all scripts executable
+    find "${ANDROID_SCRIPTS_DIR}" -type f -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true
+
+    # Add user/ directory to PATH (contains android.sh, devices.sh)
+    if [ -d "${ANDROID_SCRIPTS_DIR}/user" ]; then
+      PATH="${ANDROID_SCRIPTS_DIR}/user:$PATH"
+      export PATH
+    fi
   fi
 }
 

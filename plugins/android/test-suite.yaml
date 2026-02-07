@@ -1,0 +1,147 @@
+version: "0.5"
+
+environment:
+  - "TEST_TIMEOUT=300"
+  - "BOOT_TIMEOUT=180"
+
+log_location: "test-results/android-e2e-logs"
+log_level: info
+
+processes:
+  # Phase 1: Build - runs first (no dependency)
+  build-app:
+    command: "echo '📦 Building Android app...' && gradle assembleDebug --info && echo '✓ Build complete'"
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "test -f ${ANDROID_APP_APK:-app/build/outputs/apk/debug/app-debug.apk}"
+      initial_delay_seconds: 5
+      period_seconds: 5
+      timeout_seconds: 300
+      success_threshold: 1
+
+  # Phase 2a: Sync AVDs - ensure all AVDs match device definitions
+  sync-avds:
+    command: "echo '🔄 Syncing AVDs with device definitions...' && android.sh devices sync && echo '✓ Sync complete'"
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "echo 'Sync complete'"
+      initial_delay_seconds: 1
+      period_seconds: 2
+      timeout_seconds: 120
+      success_threshold: 1
+
+  # Phase 2b: Start emulator (depends on sync completing)
+  # Reuses existing emulator if already running
+  # Max boot time: 5 minutes, 1 retry allowed, total timeout: 10 minutes
+  android-emulator:
+    depends_on:
+      sync-avds:
+        condition: process_completed_successfully
+    command: |
+      # Detect running emulator or start new one
+      existing_emu=$(adb devices | grep emulator | head -1 | awk '{print $1}')
+
+      if [ -n "$existing_emu" ]; then
+        echo "✓ Reusing existing running emulator: $existing_emu"
+        export ANDROID_SERIAL="$existing_emu"
+      else
+        echo "🚀 Starting Android emulator (${ANDROID_DEFAULT_DEVICE:-max})..."
+        echo "⏳ Max boot time: 5 minutes (with 1 retry allowed)"
+        android.sh emulator start ${ANDROID_DEFAULT_DEVICE:-max}
+
+        # Get the newly started emulator serial
+        existing_emu=$(adb devices | grep emulator | head -1 | awk '{print $1}')
+        export ANDROID_SERIAL="${existing_emu:-emulator-5554}"
+        echo "Emulator started: $ANDROID_SERIAL"
+      fi
+
+      # Write serial to file for other processes to read
+      echo "$ANDROID_SERIAL" > /tmp/android-emu-serial.txt
+
+      # Keep process running so process-compose can monitor it
+      tail -f /dev/null
+    availability:
+      restart: "on_failure"
+      max_restarts: 1
+    readiness_probe:
+      exec:
+        command: "serial=$(cat /tmp/android-emu-serial.txt 2>/dev/null || echo emulator-5554) && adb -s $serial shell getprop sys.boot_completed 2>/dev/null | grep -q 1"
+      initial_delay_seconds: 30
+      period_seconds: 5
+      timeout_seconds: 600
+      success_threshold: 1
+      failure_threshold: 60
+    liveness_probe:
+      exec:
+        command: "adb devices | grep -q emulator"
+      initial_delay_seconds: 10
+      period_seconds: 5
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 120
+
+  # Phase 3: Deploy app - depends on both build and emulator being ready
+  deploy-app:
+    command: |
+      serial=$(cat /tmp/android-emu-serial.txt 2>/dev/null || echo emulator-5554)
+      export ANDROID_EMULATOR_SERIAL="$serial"
+
+      echo "📲 Deploying app to emulator: $serial"
+      android.sh deploy
+
+      echo ""
+      echo "Waiting for app to start..."
+      max_attempts=10
+      attempt=0
+      while [ $attempt -lt $max_attempts ]; do
+        if adb -s $serial shell pidof ${ANDROID_APP_ID:-com.example.devbox} >/dev/null 2>&1; then
+          echo "✓ App process running (PID: $(adb -s $serial shell pidof ${ANDROID_APP_ID:-com.example.devbox}))"
+          exit 0
+        fi
+        attempt=$((attempt + 1))
+        echo "  Attempt $attempt/$max_attempts..."
+        sleep 2
+      done
+
+      echo "ERROR: App did not start within timeout" >&2
+      echo "Installed packages:" >&2
+      adb -s $serial shell pm list packages | grep -i devbox || true
+      echo "Running processes:" >&2
+      adb -s $serial shell ps | grep -i devbox || true
+      exit 1
+    depends_on:
+      build-app:
+        condition: process_completed_successfully
+      android-emulator:
+        condition: process_healthy
+    availability:
+      restart: "no"
+
+  # Cleanup - stop the app but leave emulator running
+  cleanup-app:
+    command: |
+      serial=$(cat /tmp/android-emu-serial.txt 2>/dev/null || echo emulator-5554)
+      echo "🧹 Cleaning up: stopping app on $serial"
+      adb -s $serial shell am force-stop ${ANDROID_APP_ID:-com.example.devbox} 2>/dev/null || true
+      echo "✓ App stopped (emulator still running)"
+    depends_on:
+      deploy-app:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"
+
+  # Summary - displays results and optionally stays open
+  summary:
+    command: "bash ${ANDROID_FLAKE_DIR}/test-summary.sh 'Android E2E Test Suite' 'test-results/android-e2e-logs'"
+    depends_on:
+      cleanup-app:
+        condition: process_completed
+    availability:
+      restart: "no"
+    shutdown:
+      signal: 15
+      timeout_seconds: 1

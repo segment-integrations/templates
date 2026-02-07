@@ -17,14 +17,14 @@ ANDROID_AVD_MANAGER_LOADED_PID="$$"
 
 # Source dependencies
 if [ -n "${ANDROID_SCRIPTS_DIR:-}" ]; then
-  if [ -f "${ANDROID_SCRIPTS_DIR}/lib.sh" ]; then
-    . "${ANDROID_SCRIPTS_DIR}/lib.sh"
+  if [ -f "${ANDROID_SCRIPTS_DIR}/lib/lib.sh" ]; then
+    . "${ANDROID_SCRIPTS_DIR}/lib/lib.sh"
   fi
-  if [ -f "${ANDROID_SCRIPTS_DIR}/core.sh" ]; then
-    . "${ANDROID_SCRIPTS_DIR}/core.sh"
+  if [ -f "${ANDROID_SCRIPTS_DIR}/platform/core.sh" ]; then
+    . "${ANDROID_SCRIPTS_DIR}/platform/core.sh"
   fi
-  if [ -f "${ANDROID_SCRIPTS_DIR}/device_config.sh" ]; then
-    . "${ANDROID_SCRIPTS_DIR}/device_config.sh"
+  if [ -f "${ANDROID_SCRIPTS_DIR}/platform/device_config.sh" ]; then
+    . "${ANDROID_SCRIPTS_DIR}/platform/device_config.sh"
   fi
 fi
 
@@ -543,8 +543,12 @@ android_ensure_avd_from_definition() {
     return 0
   fi
 
-  # Mismatch - recreate AVD
-  echo "  🔄 Recreating AVD: $name (API $current_api→$api, $current_tag→$tag, $current_abi→$expected_abi)"
+  # Mismatch or new AVD - create/recreate
+  if [ -z "$current_api" ]; then
+    echo "  ➕ Creating new AVD: $name (API $api, $tag, $expected_abi)"
+  else
+    echo "  🔄 Recreating AVD: $name (API $current_api → $api, $current_tag → $tag, $current_abi → $expected_abi)"
+  fi
   android_delete_avd "$name" >/dev/null 2>&1
   android_create_avd "$name" "$device_hardware" "$system_image" >/dev/null 2>&1
   return 1
