@@ -43,7 +43,10 @@
     "{{ .Virtenv }}/test-suite.yaml": "config/test-suite.yaml",
     "{{ .Virtenv }}/scripts/env.sh": "scripts/env.sh",
     "{{ .Virtenv }}/scripts/lib.sh": "scripts/lib.sh",
-    "{{ .Virtenv }}/scripts/avd.sh": "scripts/avd.sh",
+    "{{ .Virtenv }}/scripts/core.sh": "scripts/core.sh",
+    "{{ .Virtenv }}/scripts/device_config.sh": "scripts/device_config.sh",
+    "{{ .Virtenv }}/scripts/avd_manager.sh": "scripts/avd_manager.sh",
+    "{{ .Virtenv }}/scripts/avd_reset.sh": "scripts/avd_reset.sh",
     "{{ .Virtenv }}/scripts/emulator.sh": "scripts/emulator.sh",
     "{{ .Virtenv }}/scripts/deploy.sh": "scripts/deploy.sh",
     "{{ .Virtenv }}/scripts/android.sh": "scripts/android.sh",
@@ -87,7 +90,7 @@
         "android_start_emulator \"${1:-}\""
       ],
       "start:android": [
-        "android_run_app \"${1-}\""
+        "android_deploy_app \"${1-}\""
       ],
       "stop:emu": [
         "android_stop_emulator"

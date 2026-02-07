@@ -1,3 +1,69 @@
+# Quick Test Reference
+
+## Fast Tests (Development)
+```bash
+devbox run test:plugin:unit        # Plugin unit tests only (~10-30 sec)
+devbox run test:integration        # Integration tests only (~30-60 sec)
+devbox run test:fast            # Everything except E2E (~1-2 min)
+```
+
+## Platform-Specific
+```bash
+devbox run test:android            # Android: lint + unit + integration
+devbox run test:ios                # iOS: lint + unit + integration
+devbox run test:rn                 # React Native: lint only
+```
+
+## E2E Tests (Slow)
+```bash
+devbox run test:e2e                # All E2E tests (~10-15 min)
+devbox run test:e2e:android        # Android E2E only
+devbox run test:e2e:ios            # iOS E2E only
+devbox run test:e2e:rn             # React Native E2E
+```
+
+## Complete Suite
+```bash
+devbox run test                    # Everything (~30-60 min)
+```
+
+## Test Structure
+
+```
+plugins/tests/              # Pure unit tests
+├── android/
+│   ├── test-lib.sh        # lib.sh function tests
+│   └── test-devices.sh    # devices.sh CLI tests
+└── ios/
+    └── test-lib.sh        # lib.sh function tests
+
+tests/                      # Integration & E2E tests
+├── integration/           # Plugin integration tests
+│   ├── android/
+│   │   ├── test-device-mgmt.sh
+│   │   └── test-validation.sh
+│   └── ios/
+│       ├── test-device-mgmt.sh
+│       └── test-cache.sh
+├── fixtures/             # Test assets
+│   ├── android/devices/
+│   └── ios/devices/
+└── e2e/                  # Full application workflows
+    ├── e2e-android-orchestrated.sh
+    ├── e2e-ios-orchestrated.sh
+    └── e2e-react-native-orchestrated.sh
+```
+
+## Test Categories
+
+| Type | Location | What It Tests | Speed |
+|------|----------|---------------|-------|
+| **Plugin Unit** | `plugins/tests/` | Individual functions | ⚡ Fast (10-30s) |
+| **Integration** | `tests/integration/` | Plugin workflows | 🏃 Medium (30-60s) |
+| **E2E** | `tests/e2e/` | Full app lifecycle | 🐢 Slow (5-15min) |
+
+---
+
 # Testing Guide
 
 This directory contains orchestrated test suites using process-compose for concurrent execution, health checks, and comprehensive coverage.
@@ -14,7 +80,7 @@ TEST_TUI=true devbox run test
 # Run specific test suites
 devbox run test:unit          # Plugin unit tests
 devbox run test:lint          # Linting + workflow validation
-devbox run test:e2e           # All E2E tests (sequential)
+devbox run test:e2e           # All E2E tests (orchestrated)
 devbox run test:e2e:android   # Android E2E only
 devbox run test:e2e:ios       # iOS E2E only
 devbox run test:e2e:rn        # React Native E2E only
@@ -52,7 +118,7 @@ Phase 2 (parallel, after lint):
 ├── test-android-devices
 └── test-ios-lib
 
-Phase 3 (sequential, after unit tests):
+Phase 3 (orchestrated, after unit tests):
 ├── e2e-android
 ├── e2e-ios
 └── e2e-react-native
@@ -97,9 +163,9 @@ Runs plugin unit tests after linting:
 
 **Configuration**: `tests/process-compose-e2e.yaml`
 
-Runs end-to-end tests sequentially (to avoid resource conflicts):
+Runs end-to-end tests with orchestrated dependencies (one platform at a time to avoid resource conflicts):
 
-1. **Android E2E** (`tests/e2e-android-orchestrated.sh`)
+1. **Android E2E** (`tests/e2e/e2e-android.sh`)
    - Setup AVD
    - Build Android app
    - Start emulator (with boot verification)
@@ -107,7 +173,7 @@ Runs end-to-end tests sequentially (to avoid resource conflicts):
    - Verify app is running
    - Cleanup
 
-2. **iOS E2E** (`tests/e2e-ios-orchestrated.sh`)
+2. **iOS E2E** (`tests/e2e/e2e-ios.sh`)
    - Verify simulator exists
    - Build iOS app
    - Start simulator (with boot verification)
@@ -115,7 +181,7 @@ Runs end-to-end tests sequentially (to avoid resource conflicts):
    - Verify app is running
    - Cleanup
 
-3. **React Native E2E** (`tests/e2e-react-native-orchestrated.sh`)
+3. **React Native E2E** (`tests/e2e/e2e-react-native.sh`)
    - Install Node dependencies
    - Build web bundle
    - Run Android workflow
@@ -165,17 +231,13 @@ devbox run lint:rn
 ### E2E Tests
 
 ```bash
-# All platforms (sequential)
+# All platforms (orchestrated)
 devbox run test:e2e
 
 # Individual platforms
 devbox run test:e2e:android   # Android only
 devbox run test:e2e:ios       # iOS only
 devbox run test:e2e:rn        # React Native (both platforms)
-
-# Legacy tests (non-orchestrated)
-devbox run test:e2e:sequential   # Old sequential runner
-devbox run test:e2e:parallel     # Old parallel runner (experimental)
 ```
 
 ### Workflow Validation
@@ -370,20 +432,6 @@ act -W .github/workflows/pr-checks.yml
    - Don't run `devbox run sync` before every test
    - Gradle/Xcode builds are cached
 
-### Parallel vs Sequential
-
-**Unit tests**: Always parallel (built into orchestration)
-
-**E2E tests**: Sequential by default to avoid:
-- Port conflicts
-- Resource exhaustion
-- Flaky tests
-
-To experiment with parallel E2E (not recommended):
-```bash
-devbox run test:e2e:parallel  # Legacy parallel runner
-```
-
 ## Test Development
 
 ### Adding New Unit Tests
@@ -432,13 +480,13 @@ ls -la /tmp/devbox-unit-tests-logs/
 3. **Better than systemd**: Cross-platform, no daemon required, project-local
 4. **Better than Docker Compose**: No containerization overhead, native process management
 
-### Why Sequential E2E?
+### Why Orchestrated E2E Execution?
 
-E2E tests are sequential because:
+E2E tests run one platform at a time (with orchestrated dependencies) because:
 - Emulators/simulators are resource-intensive
 - Port conflicts (ADB, iOS device communication)
-- More reliable than parallel execution
-- Still faster than total runtime (builds are parallelized internally)
+- More reliable than running all platforms concurrently
+- Internal steps are parallelized (builds happen concurrently with setup)
 
 ### Why Separate Configs?
 

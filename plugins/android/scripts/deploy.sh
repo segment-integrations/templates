@@ -17,8 +17,9 @@ ANDROID_DEPLOY_LOADED_PID="$$"
 
 # Source dependencies
 if [ -n "${ANDROID_SCRIPTS_DIR:-}" ]; then
-  . "${ANDROID_SCRIPTS_DIR}/env.sh"
   . "${ANDROID_SCRIPTS_DIR}/lib.sh"
+  . "${ANDROID_SCRIPTS_DIR}/core.sh"
+  . "${ANDROID_SCRIPTS_DIR}/emulator.sh"
 fi
 
 # Run Android project build via devbox

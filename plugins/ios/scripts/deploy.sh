@@ -16,17 +16,17 @@ IOS_DEPLOY_LOADED=1
 IOS_DEPLOY_LOADED_PID="$$"
 
 # Source dependencies
-script_dir="$(cd "$(dirname "$0")" && pwd)"
-if [ -n "${IOS_SCRIPTS_DIR:-}" ] && [ -d "${IOS_SCRIPTS_DIR}" ]; then
-  script_dir="${IOS_SCRIPTS_DIR}"
+if [ -n "${IOS_SCRIPTS_DIR:-}" ]; then
+  if [ -f "${IOS_SCRIPTS_DIR}/lib.sh" ]; then
+    . "${IOS_SCRIPTS_DIR}/lib.sh"
+  fi
+  if [ -f "${IOS_SCRIPTS_DIR}/core.sh" ]; then
+    . "${IOS_SCRIPTS_DIR}/core.sh"
+  fi
+  if [ -f "${IOS_SCRIPTS_DIR}/simulator.sh" ]; then
+    . "${IOS_SCRIPTS_DIR}/simulator.sh"
+  fi
 fi
-
-# shellcheck disable=SC1090
-. "$script_dir/lib.sh"
-# shellcheck disable=SC1090
-. "$script_dir/device.sh"
-# shellcheck disable=SC1090
-. "$script_dir/simulator.sh"
 
 ios_debug_log "deploy.sh loaded"
 

@@ -1,24 +1,31 @@
 #!/usr/bin/env sh
-# Android Plugin - AVD Management
-# See SCRIPTS.md for detailed documentation
+# Android Plugin - AVD Manager Operations
+# Extracted from avd.sh to eliminate circular dependencies
 
 set -eu
 
 if ! (return 0 2>/dev/null); then
-  echo "ERROR: avd.sh must be sourced, not executed directly" >&2
+  echo "ERROR: avd_manager.sh must be sourced, not executed directly" >&2
   exit 1
 fi
 
-if [ "${ANDROID_AVD_LOADED:-}" = "1" ] && [ "${ANDROID_AVD_LOADED_PID:-}" = "$$" ]; then
+if [ "${ANDROID_AVD_MANAGER_LOADED:-}" = "1" ] && [ "${ANDROID_AVD_MANAGER_LOADED_PID:-}" = "$$" ]; then
   return 0 2>/dev/null || exit 0
 fi
-ANDROID_AVD_LOADED=1
-ANDROID_AVD_LOADED_PID="$$"
+ANDROID_AVD_MANAGER_LOADED=1
+ANDROID_AVD_MANAGER_LOADED_PID="$$"
 
 # Source dependencies
 if [ -n "${ANDROID_SCRIPTS_DIR:-}" ]; then
-  . "${ANDROID_SCRIPTS_DIR}/env.sh"
-  . "${ANDROID_SCRIPTS_DIR}/lib.sh"
+  if [ -f "${ANDROID_SCRIPTS_DIR}/lib.sh" ]; then
+    . "${ANDROID_SCRIPTS_DIR}/lib.sh"
+  fi
+  if [ -f "${ANDROID_SCRIPTS_DIR}/core.sh" ]; then
+    . "${ANDROID_SCRIPTS_DIR}/core.sh"
+  fi
+  if [ -f "${ANDROID_SCRIPTS_DIR}/device_config.sh" ]; then
+    . "${ANDROID_SCRIPTS_DIR}/device_config.sh"
+  fi
 fi
 
 # ============================================================================
@@ -100,99 +107,6 @@ android_pick_system_image() {
   done
 
   return 1
-}
-
-# ============================================================================
-# Device Files and Selection
-# ============================================================================
-
-# Get path to devices directory
-android_get_devices_dir() {
-  # Priority 1: Explicit ANDROID_DEVICES_DIR
-  if [ -n "${ANDROID_DEVICES_DIR:-}" ] && [ -d "${ANDROID_DEVICES_DIR}" ]; then
-    printf '%s\n' "${ANDROID_DEVICES_DIR}"
-    return 0
-  fi
-
-  # Try using shared utility if available
-  if command -v android_resolve_project_path >/dev/null 2>&1; then
-    devices_path="$(android_resolve_project_path "devices" 2>/dev/null || true)"
-    if [ -n "$devices_path" ] && [ -d "$devices_path" ]; then
-      printf '%s\n' "$devices_path"
-      return 0
-    fi
-  fi
-
-  # Fallback: Check config dir directly
-  if [ -n "${ANDROID_CONFIG_DIR:-}" ] && [ -d "${ANDROID_CONFIG_DIR}/devices" ]; then
-    printf '%s\n' "${ANDROID_CONFIG_DIR}/devices"
-    return 0
-  fi
-
-  return 1
-}
-
-# List all device definition files in directory
-android_list_device_files() {
-  devices_dir="$1"
-
-  if [ -z "$devices_dir" ] || [ ! -d "$devices_dir" ]; then
-    return 1
-  fi
-
-  find "$devices_dir" -type f -name '*.json' | sort
-}
-
-# Resolve device name to device file path
-android_resolve_device_file() {
-  device_selection="$1"
-  devices_dir="$2"
-
-  if [ -z "$device_selection" ] || [ -z "$devices_dir" ]; then
-    return 1
-  fi
-
-  # Strategy 1: Try direct filename match
-  candidate_file="${devices_dir}/${device_selection}.json"
-  if [ -f "$candidate_file" ]; then
-    printf '%s\n' "$candidate_file"
-    return 0
-  fi
-
-  # Strategy 2: Search by .name field
-  for device_file in $(android_list_device_files "$devices_dir"); do
-    device_name="$(jq -r '.name // empty' "$device_file" 2>/dev/null || true)"
-    if [ "$device_name" = "$device_selection" ]; then
-      printf '%s\n' "$device_file"
-      return 0
-    fi
-  done
-
-  return 1
-}
-
-# Select device files based on user selection (or all if none specified)
-android_select_device_files() {
-  devices_dir="$1"
-
-  # Determine which device(s) to process
-  # Priority: ANDROID_DEVICE_NAME > TARGET_DEVICE > ANDROID_DEFAULT_DEVICE > all devices
-  device_selection="${ANDROID_DEVICE_NAME:-${TARGET_DEVICE:-${ANDROID_DEFAULT_DEVICE:-}}}"
-
-  if [ -n "$device_selection" ]; then
-    # Try to find specific device
-    device_file="$(android_resolve_device_file "$device_selection" "$devices_dir" 2>/dev/null || true)"
-    if [ -n "$device_file" ]; then
-      printf '%s\n' "$device_file"
-      return 0
-    fi
-
-    echo "WARNING: Android device '$device_selection' not found in ${devices_dir}" >&2
-    echo "         Using all available devices instead" >&2
-  fi
-
-  # Return all device files
-  android_list_device_files "$devices_dir"
 }
 
 # ============================================================================
@@ -354,6 +268,24 @@ android_create_avd() {
     --device "$device_hardware" \
     --abi "$image_abi" \
     --sdcard 512M
+}
+
+# Delete specific AVD(s) by name
+android_delete_avd() {
+  avd_name="$1"
+
+  if [ -z "$avd_name" ]; then
+    return 1
+  fi
+
+  if ! android_avd_exists "$avd_name"; then
+    echo "AVD not found: $avd_name"
+    return 0
+  fi
+
+  echo "Deleting AVD: $avd_name"
+  android_run_avdmanager delete avd --name "$avd_name"
+  echo "  ✓ AVD deleted: $avd_name"
 }
 
 # ============================================================================
@@ -550,143 +482,6 @@ android_setup_avds() {
 }
 
 # ============================================================================
-# AVD Reset
-# ============================================================================
-
-# Resolve absolute path for safety checks
-android_resolve_absolute_path() {
-  target_path="$1"
-
-  # If path is a directory, cd into it and get pwd
-  if [ -d "$target_path" ]; then
-    (cd "$target_path" 2>/dev/null && pwd)
-    return $?
-  fi
-
-  # If path is a file, resolve directory and append filename
-  if [ -e "$target_path" ]; then
-    target_dir="$(cd "$(dirname "$target_path")" 2>/dev/null && pwd)" || return 1
-    target_file="$(basename "$target_path")"
-    printf '%s/%s\n' "$target_dir" "$target_file"
-    return 0
-  fi
-
-  return 1
-}
-
-# Check if a path is within a safe root directory
-android_is_safe_path() {
-  candidate_path="$1"
-  safe_root="$2"
-
-  # Resolve to absolute path
-  resolved_path="$(android_resolve_absolute_path "$candidate_path" 2>/dev/null || true)"
-  if [ -z "$resolved_path" ]; then
-    return 1
-  fi
-
-  # Check if resolved path starts with safe root
-  case "$resolved_path" in
-    "$safe_root"/*)
-      return 0
-      ;;
-    *)
-      return 1
-      ;;
-  esac
-}
-
-# Safely remove a directory (validates path is within safe_root)
-android_safe_remove_directory() {
-  target_dir="$1"
-  safe_root="$2"
-
-  # If doesn't exist, nothing to do
-  if [ ! -e "$target_dir" ]; then
-    return 0
-  fi
-
-  # Validate path is safe
-  if ! android_is_safe_path "$target_dir" "$safe_root"; then
-    echo "ERROR: Refusing to remove non-project path: $target_dir" >&2
-    return 1
-  fi
-
-  # Determine rm binary (prefer system rm on macOS)
-  rm_binary="rm"
-  if [ "$(uname -s)" = "Darwin" ] && [ -x /bin/rm ]; then
-    rm_binary="/bin/rm"
-  fi
-
-  # Remove macOS immutable flags if on macOS
-  if command -v chflags >/dev/null 2>&1; then
-    chflags -R nouchg "$target_dir" >/dev/null 2>&1 || true
-  fi
-
-  # Ensure we have write permissions
-  chmod -R u+w "$target_dir" >/dev/null 2>&1 || true
-
-  # Remove the directory
-  if ! "$rm_binary" -rf "$target_dir"; then
-    echo "ERROR: Failed to remove $target_dir" >&2
-    echo "       Check permissions or Full Disk Access for your terminal" >&2
-    return 1
-  fi
-
-  return 0
-}
-
-# Safely remove a file (validates path is within safe_root)
-android_safe_remove_file() {
-  target_file="$1"
-  safe_root="$2"
-
-  # If doesn't exist, nothing to do
-  if [ ! -e "$target_file" ]; then
-    return 0
-  fi
-
-  # Validate path is safe
-  if ! android_is_safe_path "$target_file" "$safe_root"; then
-    echo "ERROR: Refusing to remove non-project file: $target_file" >&2
-    return 1
-  fi
-
-  # Determine rm binary
-  rm_binary="rm"
-  if [ "$(uname -s)" = "Darwin" ] && [ -x /bin/rm ]; then
-    rm_binary="/bin/rm"
-  fi
-
-  # Remove the file
-  if ! "$rm_binary" -f "$target_file"; then
-    echo "ERROR: Failed to remove $target_file" >&2
-    echo "       Check permissions" >&2
-    return 1
-  fi
-
-  return 0
-}
-
-# Delete specific AVD(s) by name
-android_delete_avd() {
-  avd_name="$1"
-
-  if [ -z "$avd_name" ]; then
-    return 1
-  fi
-
-  if ! android_avd_exists "$avd_name"; then
-    echo "AVD not found: $avd_name"
-    return 0
-  fi
-
-  echo "Deleting AVD: $avd_name"
-  android_run_avdmanager delete avd --name "$avd_name"
-  echo "  ✓ AVD deleted: $avd_name"
-}
-
-# ============================================================================
 # AVD Sync - Ensure AVD matches device definition
 # ============================================================================
 
@@ -755,150 +550,4 @@ android_ensure_avd_from_definition() {
   return 1
 }
 
-# Reset Android plugin state (AVDs, configs, adb keys)
-android_reset_avds() {
-  device_filter="${1:-}"
-
-  echo "================================================"
-  echo "Android AVD Reset"
-  echo "================================================"
-  echo ""
-
-  # ---- Validate Environment ----
-
-  sdk_home="${ANDROID_SDK_HOME:-}"
-  if [ -z "$sdk_home" ]; then
-    echo "ERROR: ANDROID_SDK_HOME is not set" >&2
-    echo "       Cannot reset state without knowing Android state directory" >&2
-    echo "       This safety check prevents accidental system-wide deletion" >&2
-    return 1
-  fi
-
-  echo "Android state directory: $sdk_home"
-
-  # ---- Determine Safe Root ----
-
-  safe_root="$(android_resolve_absolute_path "$sdk_home/.." 2>/dev/null || true)"
-  if [ -z "$safe_root" ]; then
-    echo "ERROR: Unable to resolve Android state root directory" >&2
-    echo "       Refusing to reset for safety" >&2
-    return 1
-  fi
-
-  echo "Safe root: $safe_root"
-  echo "  (Only paths within this directory will be removed)"
-  echo ""
-
-  # ---- Device-Specific or Full Reset ----
-
-  if [ -n "$device_filter" ]; then
-    # Reset specific device(s)
-    echo "Resetting specific device: $device_filter"
-    echo ""
-
-    # Find device file
-    devices_dir="$(android_get_devices_dir 2>/dev/null || true)"
-    if [ -z "$devices_dir" ]; then
-      echo "ERROR: Cannot find devices directory" >&2
-      return 1
-    fi
-
-    device_file="$(android_resolve_device_file "$device_filter" "$devices_dir" 2>/dev/null || true)"
-    if [ -z "$device_file" ]; then
-      echo "ERROR: Device not found: $device_filter" >&2
-      return 1
-    fi
-
-    # Get AVD name from device definition
-    avd_name="$(jq -r '.name // empty' "$device_file")"
-    if [ -z "$avd_name" ]; then
-      echo "ERROR: Device definition has no name field: $device_file" >&2
-      return 1
-    fi
-
-    # Delete the AVD
-    android_delete_avd "$avd_name"
-  else
-    # Full reset - all AVDs and state
-    echo "Resetting ALL Android state..."
-    echo ""
-
-    avd_directory="${ANDROID_AVD_HOME:-$sdk_home/avd}"
-    android_dot_dir="$sdk_home/.android"
-    adb_key_sdk="$sdk_home/adbkey"
-    adb_key_sdk_pub="$sdk_home/adbkey.pub"
-    adb_key_android="$android_dot_dir/adbkey"
-    adb_key_android_pub="$android_dot_dir/adbkey.pub"
-
-    echo "Will remove:"
-    echo "  - AVDs: $avd_directory"
-    echo "  - Android config: $android_dot_dir"
-    echo "  - ADB keys: $adb_key_sdk, $adb_key_sdk_pub"
-    echo "  - ADB keys: $adb_key_android, $adb_key_android_pub"
-    echo ""
-
-    # Remove AVD directory
-    if [ -d "$avd_directory" ]; then
-      echo "Removing AVDs..."
-      android_safe_remove_directory "$avd_directory" "$safe_root"
-      echo "  ✓ AVDs removed"
-    else
-      echo "  • AVDs directory not found (already clean)"
-    fi
-
-    # Remove .android directory
-    if [ -d "$android_dot_dir" ]; then
-      echo "Removing .android config..."
-      android_safe_remove_directory "$android_dot_dir" "$safe_root"
-      echo "  ✓ .android removed"
-    else
-      echo "  • .android directory not found (already clean)"
-    fi
-
-    # Remove ADB keys
-    echo "Removing ADB keys..."
-    android_safe_remove_file "$adb_key_sdk" "$safe_root"
-    android_safe_remove_file "$adb_key_sdk_pub" "$safe_root"
-    android_safe_remove_file "$adb_key_android" "$safe_root"
-    android_safe_remove_file "$adb_key_android_pub" "$safe_root"
-    echo "  ✓ ADB keys removed"
-  fi
-
-  echo ""
-  echo "================================================"
-  echo "✓ Reset complete!"
-  echo "================================================"
-  echo ""
-  echo "To recreate AVDs, run:"
-  echo "  devbox run start-emu [device]"
-}
-
-# ============================================================================
-# Source Additional Modules
-# ============================================================================
-
-# Get script directory for sourcing other modules
-script_dir="$(cd "$(dirname "$0")" 2>/dev/null && pwd || pwd)"
-if [ -n "${ANDROID_SCRIPTS_DIR:-}" ] && [ -d "${ANDROID_SCRIPTS_DIR}" ]; then
-  script_dir="${ANDROID_SCRIPTS_DIR}"
-fi
-
-# Source emulator and deployment modules
-if [ -f "$script_dir/emulator.sh" ]; then
-  . "$script_dir/emulator.sh"
-fi
-
-if [ -f "$script_dir/deploy.sh" ]; then
-  . "$script_dir/deploy.sh"
-fi
-
-# Convenience aliases for common operations
-android_service() {
-  android_run_emulator_service "$@"
-}
-
-android_run_app() {
-  android_deploy_app "$@"
-}
-
-android_debug_log_script "avd.sh"
+android_debug_log_script "avd_manager.sh"

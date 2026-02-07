@@ -17,8 +17,9 @@ ANDROID_EMULATOR_LOADED_PID="$$"
 
 # Source dependencies
 if [ -n "${ANDROID_SCRIPTS_DIR:-}" ]; then
-  . "${ANDROID_SCRIPTS_DIR}/env.sh"
   . "${ANDROID_SCRIPTS_DIR}/lib.sh"
+  . "${ANDROID_SCRIPTS_DIR}/core.sh"
+  . "${ANDROID_SCRIPTS_DIR}/avd_manager.sh"
 fi
 
 # Find a running emulator by AVD name

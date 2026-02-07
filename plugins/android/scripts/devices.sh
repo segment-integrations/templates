@@ -13,8 +13,10 @@ set -eu
 
 # Source dependencies
 if [ -n "${ANDROID_SCRIPTS_DIR:-}" ]; then
-  . "${ANDROID_SCRIPTS_DIR}/env.sh"
   . "${ANDROID_SCRIPTS_DIR}/lib.sh"
+  . "${ANDROID_SCRIPTS_DIR}/core.sh"
+  . "${ANDROID_SCRIPTS_DIR}/device_config.sh"
+  . "${ANDROID_SCRIPTS_DIR}/avd_manager.sh"
 fi
 
 # ============================================================================
@@ -510,12 +512,7 @@ case "$command_name" in
   # Sync: Ensure AVDs match device definitions
   # --------------------------------------------------------------------------
   sync)
-    # Source avd.sh for AVD management functions
-    if [ ! -f "${scripts_dir}/avd.sh" ]; then
-      echo "ERROR: avd.sh not found in ${scripts_dir}" >&2
-      exit 1
-    fi
-    . "${scripts_dir}/avd.sh"
+    # AVD management functions are already loaded from avd_manager.sh at the top of this script
 
     # Check if devices.lock exists
     if [ ! -f "$lock_file_path" ]; then

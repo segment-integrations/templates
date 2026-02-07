@@ -1,8 +1,8 @@
 {
   "packages": {
     "process-compose": "latest",
-    "act":             "latest",
-    "shellcheck":      "latest"
+    "act": "latest",
+    "shellcheck": "latest"
   },
   "shell": {
     "scripts": {
@@ -19,39 +19,18 @@
       "lint:rn": [
         "bash -c 'if ls plugins/react-native/scripts/*.sh 1>/dev/null 2>&1; then shellcheck -S warning plugins/react-native/scripts/*.sh; else echo \"No React Native shell scripts to lint\"; fi'"
       ],
-      "test:android:lib": [
-        "bash plugins/tests/android/test-lib.sh"
-      ],
-      "test:android:devices": [
-        "bash plugins/tests/android/test-devices.sh"
-      ],
-      "test:android:device-mgmt": [
-        "bash plugins/tests/android/test-device-mgmt.sh"
-      ],
-      "test:android:validation": [
-        "bash plugins/tests/android/test-validation.sh"
-      ],
       "test:android": [
         "devbox run lint:android",
-        "devbox run test:android:lib",
-        "devbox run test:android:devices",
-        "devbox run test:android:device-mgmt",
-        "devbox run test:android:validation"
+        "devbox run test:plugin:android",
+        "devbox run test:integration:android"
       ],
       "test:ios:lib": [
         "sh plugins/tests/ios/test-lib.sh"
       ],
-      "test:ios:device-mgmt": [
-        "bash plugins/tests/ios/test-device-mgmt.sh"
-      ],
-      "test:ios:validation": [
-        "bash plugins/tests/ios/test-cache.sh"
-      ],
       "test:ios": [
         "devbox run lint:ios",
-        "devbox run test:ios:lib",
-        "devbox run test:ios:device-mgmt",
-        "devbox run test:ios:validation"
+        "devbox run test:plugin:ios",
+        "devbox run test:integration:ios"
       ],
       "test:rn": [
         "devbox run lint:rn"
@@ -61,23 +40,17 @@
         "process-compose -f tests/process-compose-unit-tests.yaml --tui=${TEST_TUI:-false}"
       ],
       "test:e2e:android": [
-        "bash tests/e2e-android-orchestrated.sh"
+        "bash tests/e2e/e2e-android.sh"
       ],
       "test:e2e:ios": [
-        "bash tests/e2e-ios-orchestrated.sh"
+        "bash tests/e2e/e2e-ios.sh"
       ],
       "test:e2e:rn": [
-        "bash tests/e2e-react-native-orchestrated.sh"
+        "bash tests/e2e/e2e-react-native.sh"
       ],
       "test:e2e": [
         "echo 'Running orchestrated E2E tests (sequential)...'",
         "process-compose -f tests/process-compose-e2e.yaml --tui=${TEST_TUI:-false}"
-      ],
-      "test:e2e:sequential": [
-        "bash tests/e2e-sequential.sh"
-      ],
-      "test:e2e:parallel": [
-        "bash tests/e2e-all.sh"
       ],
       "test": [
         "echo 'Cleaning previous test results...'",
@@ -121,6 +94,58 @@
         "echo '✓ All examples synced successfully!'",
         "echo ''",
         "echo 'Note: AVDs and simulators will be created automatically on first emulator/simulator start.'"
+      ],
+      "test:plugin:android:lib": [
+        "bash plugins/tests/android/test-lib.sh"
+      ],
+      "test:plugin:android:devices": [
+        "bash plugins/tests/android/test-devices.sh"
+      ],
+      "test:plugin:android": [
+        "devbox run test:plugin:android:lib",
+        "devbox run test:plugin:android:devices"
+      ],
+      "test:plugin:ios:lib": [
+        "sh plugins/tests/ios/test-lib.sh"
+      ],
+      "test:plugin:ios": [
+        "devbox run test:plugin:ios:lib"
+      ],
+      "test:plugin:unit": [
+        "echo 'Running plugin unit tests...'",
+        "devbox run test:plugin:android",
+        "devbox run test:plugin:ios"
+      ],
+      "test:integration:android:device-mgmt": [
+        "bash tests/integration/android/test-device-mgmt.sh"
+      ],
+      "test:integration:android:validation": [
+        "bash tests/integration/android/test-validation.sh"
+      ],
+      "test:integration:android": [
+        "devbox run test:integration:android:device-mgmt",
+        "devbox run test:integration:android:validation"
+      ],
+      "test:integration:ios:device-mgmt": [
+        "bash tests/integration/ios/test-device-mgmt.sh"
+      ],
+      "test:integration:ios:cache": [
+        "bash tests/integration/ios/test-cache.sh"
+      ],
+      "test:integration:ios": [
+        "devbox run test:integration:ios:device-mgmt",
+        "devbox run test:integration:ios:cache"
+      ],
+      "test:integration": [
+        "echo 'Running integration tests...'",
+        "devbox run test:integration:android",
+        "devbox run test:integration:ios"
+      ],
+      "test:fast": [
+        "echo 'Running fast tests (lint + unit + integration)...' ",
+        "devbox run lint",
+        "devbox run test:plugin:unit",
+        "devbox run test:integration"
       ]
     }
   }

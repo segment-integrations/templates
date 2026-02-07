@@ -10,6 +10,12 @@ fi
 
 # shellcheck disable=SC1090
 . "$script_dir/lib.sh"
+# shellcheck disable=SC1090
+. "$script_dir/core.sh"
+# shellcheck disable=SC1090
+. "$script_dir/device_config.sh"
+# shellcheck disable=SC1090
+. "$script_dir/device_manager.sh"
 
 usage() {
   cat >&2 <<'USAGE'
@@ -257,13 +263,6 @@ case "$command_name" in
   # Sync: Ensure simulators match device definitions
   # --------------------------------------------------------------------------
   sync)
-    # Source device.sh for device management functions
-    if [ ! -f "$script_dir/device.sh" ]; then
-      echo "ERROR: device.sh not found in ${script_dir}" >&2
-      exit 1
-    fi
-    . "$script_dir/device.sh"
-
     # Check if devices.lock exists
     lock_path="${devices_dir%/}/devices.lock"
     if [ ! -f "$lock_path" ]; then

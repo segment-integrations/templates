@@ -5,16 +5,15 @@ This repository includes comprehensive **orchestrated testing** using process-co
 ## Quick Start
 
 ```bash
-# Run EVERYTHING (lint, unit, workflow checks, E2E tests)
+# Run EVERYTHING (lint, unit, integration, E2E tests)
 devbox run test
 
 # Run with interactive TUI to see live progress
 TEST_TUI=true devbox run test
 
 # Run specific test suites
-devbox run test:lint         # Linting + workflow validation
-devbox run test:unit         # Plugin unit tests
-devbox run test:e2e          # All E2E tests (sequential)
+devbox run test:fast         # Fast tests (lint + unit + integration) ⚡
+devbox run test:e2e          # E2E tests only (slow)
 
 # Sync examples with latest plugins
 devbox run sync
@@ -45,9 +44,11 @@ All tests are now orchestrated using [process-compose](https://github.com/F1bona
 
 | Command | Description | What It Does |
 |---------|-------------|--------------|
+| `devbox run test:fast` | Fast tests | Lint + unit + integration (1-2 min) ⚡ |
 | `devbox run test:lint` | Linting + validation | Shellcheck all scripts, validate GitHub workflows |
-| `devbox run test:unit` | Plugin unit tests | All Android, iOS, React Native tests (parallel) |
-| `devbox run test:e2e` | E2E tests | Full workflow tests (sequential) |
+| `devbox run test:plugin:unit` | Plugin unit tests | All Android, iOS unit tests (parallel) |
+| `devbox run test:integration` | Integration tests | Plugin workflows with fixtures |
+| `devbox run test:e2e` | E2E tests | Full workflow tests (10-15 min) |
 
 ### Platform-Specific Tests
 
@@ -64,13 +65,13 @@ All tests are now orchestrated using [process-compose](https://github.com/F1bona
 
 | Command | Description |
 |---------|-------------|
-| `devbox run test:android:lib` | Android library functions |
-| `devbox run test:android:devices` | Android device management |
-| `devbox run test:android:device-mgmt` | Android device CRUD |
-| `devbox run test:android:validation` | Android validation logic |
-| `devbox run test:ios:lib` | iOS library functions |
-| `devbox run test:ios:device-mgmt` | iOS device CRUD |
-| `devbox run test:ios:cache` | iOS cache behavior |
+| `devbox run test:plugin:android:lib` | Android library functions |
+| `devbox run test:plugin:android:devices` | Android device management |
+| `devbox run test:integration:android:device-mgmt` | Android device integration |
+| `devbox run test:integration:android:validation` | Android validation logic |
+| `devbox run test:plugin:ios:lib` | iOS library functions |
+| `devbox run test:integration:ios:device-mgmt` | iOS device integration |
+| `devbox run test:integration:ios:cache` | iOS cache behavior |
 | `devbox run lint:android` | Lint Android only |
 | `devbox run lint:ios` | Lint iOS only |
 | `devbox run lint:rn` | Lint React Native only |
@@ -130,37 +131,35 @@ Android Tests          iOS Tests
 
 ### E2E Test Suite (`test:e2e`)
 
-**Sequential execution** (to avoid resource conflicts):
+**Orchestrated execution** (platforms run one at a time to avoid resource conflicts, but with internal parallelization):
 ```
 1. Android E2E
-   ├─ Setup AVD (parallel with build)
-   ├─ Build app
+   ├─ Setup AVD & Build app (concurrent)
    ├─ Start emulator → wait for boot complete ✓
    ├─ Deploy app → verify installed ✓
    └─ Verify app running ✓
 
-2. iOS E2E
-   ├─ Verify simulator (parallel with build)
-   ├─ Build app
+2. iOS E2E (after Android completes)
+   ├─ Verify simulator & Build app (concurrent)
    ├─ Start simulator → wait for boot complete ✓
    ├─ Deploy app → verify installed ✓
    └─ Verify app running ✓
 
-3. React Native E2E
-   ├─ Install deps & build web (parallel)
+3. React Native E2E (after iOS completes)
+   ├─ Install deps & build web (concurrent)
    ├─ Android workflow
    └─ iOS workflow
 ```
 
 ### Master Test Suite (`test`)
 
-**Runs everything in optimal order:**
+**Runs everything with orchestrated dependencies:**
 ```
-Phase 1: Lint + Workflow Checks (parallel)
+Phase 1: Lint + Workflow Checks (concurrent)
     ↓
-Phase 2: Unit Tests (parallel)
+Phase 2: Unit Tests (concurrent)
     ↓
-Phase 3: E2E Tests (sequential)
+Phase 3: E2E Tests (orchestrated, one platform at a time)
     ↓
 Summary Report
 ```
@@ -230,19 +229,6 @@ TEST_TUI=true devbox run test:unit
 TEST_TUI=true devbox run test
 ```
 
-## Legacy Test Commands
-
-Old test scripts still available (non-orchestrated):
-
-```bash
-bash tests/e2e-sequential.sh       # Old sequential runner
-bash tests/e2e-all.sh              # Old parallel runner
-bash tests/e2e-android.sh          # Old Android E2E
-bash tests/e2e-ios.sh              # Old iOS E2E
-bash tests/e2e-react-native.sh     # Old React Native E2E
-```
-
-**Note:** Use `devbox run test:e2e:*` commands for orchestrated versions with status checks.
 
 ## CI Integration
 
@@ -306,17 +292,16 @@ devbox run stop:sim
 
 ```bash
 # Quick reference
-devbox run test              # Everything (lint, unit, workflows, E2E)
-devbox run test:unit         # Unit tests only
-devbox run test:lint         # Linting + workflow checks
+devbox run test              # Everything (lint, unit, integration, E2E)
+devbox run test:fast         # Fast tests (lint + unit + integration) ⚡
 devbox run test:e2e          # E2E tests only
 
 # Use TUI for live progress
 TEST_TUI=true devbox run test
 
 # Platform-specific
-devbox run test:android      # Android unit tests
-devbox run test:ios          # iOS unit tests
+devbox run test:android      # Android: lint + unit + integration
+devbox run test:ios          # iOS: lint + unit + integration
 devbox run test:e2e:android  # Android E2E
 devbox run test:e2e:ios      # iOS E2E
 

@@ -2,7 +2,7 @@ version: "0.5"
 
 processes:
   android-emulator:
-    command: "bash -lc '. \"{{ .Virtenv }}/scripts/avd.sh\"; android_service'"
+    command: "bash -lc '. \"{{ .Virtenv }}/scripts/env.sh\"; android_run_emulator_service'"
     availability:
       restart: "on_failure"
     shutdown:

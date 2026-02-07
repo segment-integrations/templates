@@ -6,19 +6,19 @@ log_level: info
 processes:
   # Sequential E2E tests to avoid resource conflicts
   e2e-android:
-    command: "bash tests/e2e-android-orchestrated.sh"
+    command: "bash tests/e2e/e2e-android.sh"
     availability:
       restart: "no"
     readiness_probe:
       exec:
-        command: "test -f tests/e2e-android-orchestrated.sh"
+        command: "test -f tests/e2e/e2e-android.sh"
       initial_delay_seconds: 1
       period_seconds: 1
       timeout_seconds: 5
       success_threshold: 1
 
   e2e-ios:
-    command: "bash tests/e2e-ios-orchestrated.sh"
+    command: "bash tests/e2e/e2e-ios.sh"
     depends_on:
       e2e-android:
         condition: process_completed_successfully
@@ -26,14 +26,14 @@ processes:
       restart: "no"
     readiness_probe:
       exec:
-        command: "test -f tests/e2e-ios-orchestrated.sh"
+        command: "test -f tests/e2e/e2e-ios.sh"
       initial_delay_seconds: 1
       period_seconds: 1
       timeout_seconds: 5
       success_threshold: 1
 
   e2e-react-native:
-    command: "bash tests/e2e-react-native-orchestrated.sh"
+    command: "bash tests/e2e/e2e-react-native.sh"
     depends_on:
       e2e-ios:
         condition: process_completed_successfully
@@ -41,7 +41,7 @@ processes:
       restart: "no"
     readiness_probe:
       exec:
-        command: "test -f tests/e2e-react-native-orchestrated.sh"
+        command: "test -f tests/e2e/e2e-react-native.sh"
       initial_delay_seconds: 1
       period_seconds: 1
       timeout_seconds: 5

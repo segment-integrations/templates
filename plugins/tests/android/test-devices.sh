@@ -29,6 +29,9 @@ mkdir -p "$test_root/scripts"
 # Copy required scripts
 script_dir="$(cd "$(dirname "$0")" && pwd)"
 cp "$script_dir/../../android/scripts/lib.sh" "$test_root/scripts/"
+cp "$script_dir/../../android/scripts/core.sh" "$test_root/scripts/"
+cp "$script_dir/../../android/scripts/device_config.sh" "$test_root/scripts/"
+cp "$script_dir/../../android/scripts/avd_manager.sh" "$test_root/scripts/"
 cp "$script_dir/../../android/scripts/env.sh" "$test_root/scripts/"
 cp "$script_dir/../../android/scripts/devices.sh" "$test_root/scripts/"
 

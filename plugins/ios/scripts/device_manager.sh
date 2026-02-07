@@ -1,30 +1,32 @@
 #!/usr/bin/env sh
-# iOS Plugin - Device and Runtime Management
-# See REFERENCE.md for detailed documentation
+# iOS Plugin - Device and Simulator Management
+# Extracted from device.sh to eliminate circular dependencies
 
 set -eu
 
 if ! (return 0 2>/dev/null); then
-  echo "ERROR: device.sh must be sourced" >&2
+  echo "ERROR: device_manager.sh must be sourced, not executed directly" >&2
   exit 1
 fi
 
-if [ "${IOS_DEVICE_LOADED:-}" = "1" ] && [ "${IOS_DEVICE_LOADED_PID:-}" = "$$" ]; then
+if [ "${IOS_DEVICE_MANAGER_LOADED:-}" = "1" ] && [ "${IOS_DEVICE_MANAGER_LOADED_PID:-}" = "$$" ]; then
   return 0 2>/dev/null || exit 0
 fi
-IOS_DEVICE_LOADED=1
-IOS_DEVICE_LOADED_PID="$$"
+IOS_DEVICE_MANAGER_LOADED=1
+IOS_DEVICE_MANAGER_LOADED_PID="$$"
 
 # Source dependencies
-script_dir="$(cd "$(dirname "$0")" && pwd)"
-if [ -n "${IOS_SCRIPTS_DIR:-}" ] && [ -d "${IOS_SCRIPTS_DIR}" ]; then
-  script_dir="${IOS_SCRIPTS_DIR}"
+if [ -n "${IOS_SCRIPTS_DIR:-}" ]; then
+  if [ -f "${IOS_SCRIPTS_DIR}/lib.sh" ]; then
+    . "${IOS_SCRIPTS_DIR}/lib.sh"
+  fi
+  if [ -f "${IOS_SCRIPTS_DIR}/core.sh" ]; then
+    . "${IOS_SCRIPTS_DIR}/core.sh"
+  fi
+  if [ -f "${IOS_SCRIPTS_DIR}/device_config.sh" ]; then
+    . "${IOS_SCRIPTS_DIR}/device_config.sh"
+  fi
 fi
-
-# shellcheck disable=SC1090
-. "$script_dir/lib.sh"
-
-ios_debug_log "device.sh loaded"
 
 # ============================================================================
 # Runtime Management Functions
@@ -125,115 +127,6 @@ resolve_runtime_name_strict() {
 }
 
 # ============================================================================
-# Device File Management Functions
-# ============================================================================
-
-# List all device JSON files in directory
-# Args: devices_dir
-# Returns: sorted list of device files
-ios_device_files() {
-  dir="$1"
-  if [ -z "$dir" ]; then
-    return 1
-  fi
-  find "$dir" -type f -name '*.json' | sort
-}
-
-# List device files selected by IOS_DEVICES config
-# Args: devices_dir
-# Returns: filtered list of device files
-ios_selected_device_files() {
-  devices_dir="$1"
-
-  # Read IOS_DEVICES from environment (comma or space separated)
-  selections="${IOS_DEVICES:-}"
-  selections="$(echo "$selections" | tr ',' ' ')"
-
-  if [ -z "$selections" ]; then
-    # Empty = all devices
-    ios_device_files "$devices_dir"
-    return 0
-  fi
-
-  matched=""
-  for file in $(ios_device_files "$devices_dir"); do
-    base="$(basename "$file")"
-    base="${base%.json}"
-    name="$(jq -r '.name // empty' "$file")"
-    for selection in $selections; do
-      if [ "$selection" = "$base" ] || [ "$selection" = "$name" ]; then
-        matched="${matched}${file}
-"
-        break
-      fi
-    done
-  done
-  if [ -z "$matched" ]; then
-    echo "No iOS device definitions matched IOS_DEVICES='${IOS_DEVICES}'." >&2
-    return 1
-  fi
-  printf '%s' "$matched"
-}
-
-# Get runtime for device by name
-# Args: device_name
-# Returns: runtime version
-ios_device_runtime_for_name() {
-  name="$1"
-  dir="$(ios_devices_dir 2>/dev/null || true)"
-  if [ -z "$dir" ]; then
-    return 1
-  fi
-  for file in $(ios_device_files "$dir"); do
-    file_name="$(jq -r '.name // empty' "$file")"
-    if [ -n "$file_name" ] && [ "$file_name" = "$name" ]; then
-      runtime="$(jq -r '.runtime // empty' "$file")"
-      if [ -n "$runtime" ]; then
-        printf '%s\n' "$runtime"
-        return 0
-      fi
-    fi
-  done
-  return 1
-}
-
-# ============================================================================
-# Device Selection Functions
-# ============================================================================
-
-# Select device name from directory by selection criteria
-# Args: selection, devices_dir
-# Returns: device name
-ios_select_device_name() {
-  selection="$1"
-  dir="$2"
-  if [ -z "$dir" ]; then
-    return 1
-  fi
-  if [ -n "$selection" ]; then
-    for file in $(ios_device_files "$dir"); do
-      base="$(basename "$file")"
-      base="${base%.json}"
-      name="$(jq -r '.name // empty' "$file")"
-      if [ "$selection" = "$base" ] || [ "$selection" = "$name" ]; then
-        printf '%s\n' "$name"
-        return 0
-      fi
-    done
-    echo "Warning: iOS device '${selection}' not found in ${dir}; using first definition." >&2
-  fi
-  first_file="$(ios_device_files "$dir" | head -n1)"
-  if [ -n "$first_file" ]; then
-    first_name="$(jq -r '.name // empty' "$first_file")"
-    if [ -n "$first_name" ]; then
-      printf '%s\n' "$first_name"
-      return 0
-    fi
-  fi
-  return 1
-}
-
-# ============================================================================
 # Simulator Device Queries
 # ============================================================================
 
@@ -318,68 +211,48 @@ ensure_device() {
 }
 
 # ============================================================================
-# Device Sync - Ensure device matches definition
+# Device Sync Functions
 # ============================================================================
 
-# Get runtime version for an existing device
+# Get runtime version from device name
 # Args: device_name
-# Returns: runtime version (e.g., "17.5") or empty
+# Returns: runtime version (e.g., "17.5")
 ios_get_device_runtime() {
-  device_name="$1"
+  name="$1"
+  xcrun simctl list devices -j | jq -r --arg name "$name" '
+    .devices[] as $devices |
+    ($devices | keys[0]) as $runtime_key |
+    $devices[$runtime_key][] |
+    select(.name == $name) |
+    ($runtime_key | capture("iOS-(?<version>[0-9]+\\.[0-9]+)") | .version)
+  ' | head -n1
+}
 
-  # Get device info from simctl
-  device_info="$(xcrun simctl list devices -j | jq -r --arg name "$device_name" \
-    '.devices[][]? | select(.name == $name) | .udid + "|" + (.deviceTypeIdentifier // "")')"
+# Ensure device from definition file matches or is created
+# Args: device_file
+# Returns: 0 if matched, 1 if recreated, 2 if created new
+ios_ensure_device_from_definition() {
+  file="$1"
 
-  if [ -z "$device_info" ]; then
-    return 1
-  fi
+  name="$(jq -r '.name // empty' "$file")"
+  runtime="$(jq -r '.runtime // empty' "$file")"
 
-  udid="$(printf '%s' "$device_info" | cut -d'|' -f1)"
-
-  # Get runtime for this device
-  runtime="$(xcrun simctl list devices -j | jq -r --arg udid "$udid" \
-    '.devices | to_entries[] | select(.value[]?.udid == $udid) | .key' | sed 's/.*iOS \(.*\)).*/\1/' || true)"
-
-  if [ -n "$runtime" ]; then
-    printf '%s\n' "$runtime"
+  if [ -z "$name" ] || [ -z "$runtime" ]; then
+    echo "  ⚠ Invalid device definition in $file"
     return 0
   fi
 
-  return 1
-}
-
-# Ensure device matches definition, recreating if necessary
-# Args: device_json_path
-# Returns: 0=matched, 1=recreated, 2=created
-ios_ensure_device_from_definition() {
-  device_json="$1"
-
-  if [ ! -f "$device_json" ]; then
-    echo "ERROR: Device definition not found: $device_json" >&2
-    return 1
-  fi
-
-  # Parse device definition
-  name="$(jq -r '.name // empty' "$device_json")"
-  runtime="$(jq -r '.runtime // empty' "$device_json")"
-
-  if [ -z "$name" ] || [ -z "$runtime" ]; then
-    echo "ERROR: Invalid device definition in $device_json" >&2
-    return 1
-  fi
-
-  # Check if runtime is available
-  runtime_choice="$(resolve_runtime_strict "$runtime" 2>/dev/null || true)"
-  if [ -z "$runtime_choice" ]; then
+  # Resolve runtime strictly (don't fallback)
+  choice="$(resolve_runtime_strict "$runtime" || true)"
+  if [ -z "$choice" ]; then
     echo "  ⚠ Runtime iOS $runtime not available, skipping $name"
     return 0
   fi
 
-  runtime_id="$(printf '%s' "$runtime_choice" | cut -d'|' -f1)"
-  runtime_name="$(printf '%s' "$runtime_choice" | cut -d'|' -f2)"
+  runtime_id="$(printf '%s' "$choice" | cut -d'|' -f1)"
+  runtime_name="$(printf '%s' "$choice" | cut -d'|' -f2)"
 
-  # Check if device type exists
+  # Get device type
   device_type="$(devicetype_id_for_name "$name" || true)"
   if [ -z "$device_type" ]; then
     echo "  ⚠ Device type '$name' not available, skipping"
@@ -454,27 +327,4 @@ EOM
   exit 1
 }
 
-# Helper function to resolve developer dir (sources env.sh)
-ios_resolve_developer_dir() {
-  if [ -n "${IOS_DEVELOPER_DIR:-}" ] && [ -d "${IOS_DEVELOPER_DIR}" ]; then
-    printf '%s\n' "${IOS_DEVELOPER_DIR}"
-    return 0
-  fi
-
-  # Try xcode-select
-  if command -v xcode-select >/dev/null 2>&1; then
-    desired="$(xcode-select -p 2>/dev/null || true)"
-    if [ -n "$desired" ] && [ -d "$desired" ]; then
-      printf '%s\n' "$desired"
-      return 0
-    fi
-  fi
-
-  # Fallback to default Xcode location
-  if [ -d /Applications/Xcode.app/Contents/Developer ]; then
-    printf '%s\n' "/Applications/Xcode.app/Contents/Developer"
-    return 0
-  fi
-
-  return 1
-}
+ios_debug_log_script "device_manager.sh"
