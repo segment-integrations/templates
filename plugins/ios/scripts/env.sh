@@ -27,7 +27,7 @@ ios_debug_enabled() {
 
 ios_debug_log() {
   if ios_debug_enabled; then
-    printf '%s\n' "DEBUG: $*"
+    printf '%s\n' "DEBUG: $*" >&2
   fi
 }
 
@@ -104,7 +104,7 @@ load_ios_config
 if [ -f "${IOS_SCRIPTS_DIR}/validate.sh" ]; then
   . "${IOS_SCRIPTS_DIR}/validate.sh"
   ios_validate_xcode || true
-  ios_validate_lock_file || true
+  # devices.lock validation removed - auto-generated on every shell init
 fi
 
 if [ -z "${IOS_NODE_BINARY:-}" ] && command -v node >/dev/null 2>&1; then
@@ -282,7 +282,7 @@ ios_debug_log_script "templates/devbox/plugins/ios/scripts/env.sh"
 
 if ios_debug_enabled; then
   ios_debug_dump_vars \
-    EVALUATE_DEVICES \
+    IOS_DEVICES \
     IOS_DEFAULT_DEVICE \
     IOS_DEFAULT_RUNTIME \
     IOS_DEVELOPER_DIR \
@@ -325,4 +325,33 @@ if [ -n "${INIT_IOS:-}" ] && [ -z "${CI:-}" ] && [ -z "${GITHUB_ACTIONS:-}" ] &&
   IOS_SDK_SUMMARY_PRINTED=1
   export IOS_SDK_SUMMARY_PRINTED
   ios_show_summary
+fi
+
+# Source all other iOS scripts to make functions available
+# Each script has load-once guards to prevent duplicate sourcing
+if [ -n "${IOS_SCRIPTS_DIR:-}" ]; then
+  # lib.sh provides utility functions
+  if [ -f "${IOS_SCRIPTS_DIR}/lib.sh" ]; then
+    . "${IOS_SCRIPTS_DIR}/lib.sh"
+  fi
+
+  # device.sh provides device query functions
+  if [ -f "${IOS_SCRIPTS_DIR}/device.sh" ]; then
+    . "${IOS_SCRIPTS_DIR}/device.sh"
+  fi
+
+  # simulator.sh provides simulator lifecycle functions
+  if [ -f "${IOS_SCRIPTS_DIR}/simulator.sh" ]; then
+    . "${IOS_SCRIPTS_DIR}/simulator.sh"
+  fi
+
+  # deploy.sh provides app deployment functions
+  if [ -f "${IOS_SCRIPTS_DIR}/deploy.sh" ]; then
+    . "${IOS_SCRIPTS_DIR}/deploy.sh"
+  fi
+
+  # config.sh provides configuration management
+  if [ -f "${IOS_SCRIPTS_DIR}/config.sh" ]; then
+    . "${IOS_SCRIPTS_DIR}/config.sh"
+  fi
 fi

@@ -1,0 +1,108 @@
+version: "0.5"
+
+environment:
+  - "ANDROID_SERIAL=emulator-5554"
+  - "TEST_TIMEOUT=300"
+  - "BOOT_TIMEOUT=180"
+
+log_location: "test-results/android-e2e-logs"
+log_level: info
+
+processes:
+  # Phase 1: Build - runs first (no dependency)
+  build-app:
+    command: "echo '📦 Building Android app...' && devbox run --pure build:android && echo '✓ Build complete'"
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "test -f ${ANDROID_APP_APK:-app/build/outputs/apk/debug/app-debug.apk}"
+      initial_delay_seconds: 5
+      period_seconds: 5
+      timeout_seconds: 300
+      success_threshold: 1
+
+  # Phase 2a: Sync AVDs - ensure all AVDs match device definitions
+  sync-avds:
+    command: "echo '🔄 Syncing AVDs with device definitions...' && devbox run android.sh devices sync && echo '✓ Sync complete'"
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "echo 'Sync complete'"
+      initial_delay_seconds: 1
+      period_seconds: 2
+      timeout_seconds: 120
+      success_threshold: 1
+
+  # Phase 2b: Start emulator (depends on sync completing)
+  android-emulator:
+    depends_on:
+      sync-avds:
+        condition: process_completed_successfully
+    command: "echo '🚀 Starting Android emulator (${ANDROID_DEFAULT_DEVICE:-max})...' && echo '⏳ This may take 1-3 minutes to boot...' && devbox run --pure start:emu ${ANDROID_DEFAULT_DEVICE:-max}"
+    availability:
+      restart: "on_failure"
+      max_restarts: 2
+    readiness_probe:
+      exec:
+        command: "adb -s ${ANDROID_SERIAL} shell getprop sys.boot_completed | grep -q 1"
+      initial_delay_seconds: 10
+      period_seconds: 3
+      timeout_seconds: 180
+      success_threshold: 1
+      failure_threshold: 3
+    liveness_probe:
+      exec:
+        command: "adb devices | grep -q ${ANDROID_SERIAL}"
+      initial_delay_seconds: 15
+      period_seconds: 10
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 3
+    shutdown:
+      command: "devbox run --pure stop:emu"
+      timeout_seconds: 30
+
+  # Phase 3: Deploy app - depends on both build and emulator being ready
+  deploy-app:
+    command: "echo '📲 Deploying app to emulator...' && devbox run --pure start:android && echo '✓ App deployed and launched'"
+    depends_on:
+      build-app:
+        condition: process_completed_successfully
+      android-emulator:
+        condition: process_healthy
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "adb -s ${ANDROID_SERIAL} shell pm list packages | grep -q ${ANDROID_APP_ID:-com.example.devbox}"
+      initial_delay_seconds: 5
+      period_seconds: 3
+      timeout_seconds: 60
+      success_threshold: 1
+
+  # Phase 4: Verification - runs after deployment
+  verify-app-running:
+    command: "echo '✅ Verifying app is running...' && adb -s ${ANDROID_SERIAL} shell pidof ${ANDROID_APP_ID:-com.example.devbox} && echo '✓ App verification passed'"
+    depends_on:
+      deploy-app:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "adb -s ${ANDROID_SERIAL} shell pidof ${ANDROID_APP_ID:-com.example.devbox}"
+      initial_delay_seconds: 2
+      period_seconds: 3
+      timeout_seconds: 30
+      success_threshold: 1
+
+  # Cleanup - runs at the end
+  cleanup:
+    command: "echo 'Cleanup complete' && devbox run --pure stop:emu || true"
+    depends_on:
+      verify-app-running:
+        condition: process_completed
+    availability:
+      restart: "no"

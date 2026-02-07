@@ -97,6 +97,7 @@ if [ ! -f "$lib_path" ]; then
 fi
 
 # Source lib.sh
+# shellcheck source=../../android/scripts/lib.sh
 . "$lib_path"
 
 echo "========================================"

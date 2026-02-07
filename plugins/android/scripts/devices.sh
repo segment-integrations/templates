@@ -32,9 +32,8 @@ Commands:
   create <name> --api <n> --device <id> [options]  Create new device definition
   update <name> [options]                           Update existing device
   delete <name>                                     Remove device definition
-  select <name...>                                  Select specific devices for evaluation
-  reset                                             Reset device selection (all devices)
-  eval                                              Generate devices.lock
+  eval                                              Generate devices.lock from ANDROID_DEVICES
+  sync                                              Ensure AVDs match device definitions
 
 Device Creation Options:
   --api <n>         Android API level (required, e.g., 28, 34)
@@ -45,12 +44,15 @@ Device Creation Options:
 Tag values: default google_apis google_apis_playstore play_store aosp_atd google_atd
 ABI values: arm64-v8a x86_64 x86
 
+Device Selection:
+  Set ANDROID_DEVICES env var in devbox.json (comma-separated, empty = all):
+    {"ANDROID_DEVICES": "min,max"}
+
 Examples:
   devices.sh list
   devices.sh create pixel_api28 --api 28 --device pixel --tag google_apis
-  devices.sh select min max
-  devices.sh reset
   devices.sh eval
+  devices.sh sync
 USAGE
   exit 1
 }
@@ -426,115 +428,14 @@ case "$command_name" in
     echo "Deleted device definition: $device_file"
     ;;
 
-  # --------------------------------------------------------------------------
-  # select - Select specific devices for evaluation (updates lock file directly)
-  # --------------------------------------------------------------------------
-  select)
-    [ "${1-}" != "" ] || {
-      echo "ERROR: No device names provided" >&2
-      usage
-    }
-
-    # Get all device files as JSON
-    devices_json="$(
-      for device_file in $(find "$devices_dir" -name "*.json" -type f | sort); do
-        jq -c --arg file "$device_file" \
-          '. + {file: $file}' \
-          "$device_file"
-      done | jq -s '.'
-    )"
-
-    # Extract APIs from selected devices
-    api_versions=""
-    for selected_name in "$@"; do
-      # Find matching device file
-      matching_file="$(printf '%s\n' "$devices_json" | jq -r \
-        --arg sel "$selected_name" \
-        '.[] | select((.file | sub("^.*/"; "") | sub("\\.json$"; "")) == $sel or .name == $sel) | .file' \
-        | head -n1)"
-
-      if [ -z "$matching_file" ]; then
-        echo "ERROR: Device '$selected_name' not found in ${devices_dir}" >&2
-        exit 1
-      fi
-
-      # Extract API version
-      api_version="$(printf '%s\n' "$devices_json" | jq -r \
-        --arg file "$matching_file" \
-        '.[] | select(.file == $file) | .api' \
-        | head -n1)"
-
-      if [ -n "$api_version" ] && [ "$api_version" != "null" ]; then
-        api_versions="${api_versions}${api_versions:+
-}${api_version}"
-      fi
-    done
-
-    if [ -z "$api_versions" ]; then
-      echo "ERROR: No API versions found for selected devices" >&2
-      exit 1
-    fi
-
-    # Build devices array for lock file
-    devices_array="["
-    first=true
-    for selected_name in "$@"; do
-      matching_file="$(printf '%s\n' "$devices_json" | jq -r \
-        --arg sel "$selected_name" \
-        '.[] | select((.file | sub("^.*/"; "") | sub("\\.json$"; "")) == $sel or .name == $sel) | .file' \
-        | head -n1)"
-
-      if [ -n "$matching_file" ]; then
-        device_config="$(cat "$matching_file")"
-        if [ "$first" = true ]; then
-          first=false
-        else
-          devices_array="${devices_array},"
-        fi
-        devices_array="${devices_array}${device_config}"
-      fi
-    done
-    devices_array="${devices_array}]"
-
-    # Compute checksum
-    checksum="$(android_compute_devices_checksum "$devices_dir" || echo "")"
-
-    # Generate lock file with full device configs (use existing lock_file_path from header)
-    temp_lock_file="${lock_file_path}.tmp"
-    echo "$devices_array" | jq \
-      --arg cs "$checksum" \
-      --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date +%Y-%m-%dT%H:%M:%SZ)" \
-      '{devices: ., checksum: $cs, generated_at: $ts}' \
-      > "$temp_lock_file"
-
-    mv "$temp_lock_file" "$lock_file_path"
-
-    # Update Android flake lock
-    flake_dir="${config_dir}"
-    if [ -f "${flake_dir}/flake.nix" ] && [ -f "${flake_dir}/flake.lock" ]; then
-      if command -v nix >/dev/null 2>&1; then
-        (cd "${flake_dir}" && nix flake update 2>&1 | grep -v "^warning:" || true) >/dev/null
-      fi
-    fi
-
-    device_count="$(jq '.devices | length' "$lock_file_path")"
-    selected_apis="$(jq -r '.devices | map(.api) | join(",")' "$lock_file_path")"
-    echo "Selected Android devices: $*"
-    echo "Lock file updated: ${device_count} devices with APIs ${selected_apis}"
-    ;;
-
-  # --------------------------------------------------------------------------
-  # reset - Reset device selection to all devices (regenerate from all files)
-  # --------------------------------------------------------------------------
-  reset)
-    echo "Regenerating lock file from all device files..."
-    exec "$0" eval
-    ;;
 
   # --------------------------------------------------------------------------
   # eval - Generate devices.lock from device definitions
   # --------------------------------------------------------------------------
   eval)
+    # Suppress SDK warnings during eval - SDK will be available after initialization
+    export ANDROID_DEVICES_EVAL=1
+
     if [ ! -d "$devices_dir" ]; then
       echo "ERROR: Devices directory not found: $devices_dir" >&2
       exit 1
@@ -557,7 +458,7 @@ case "$command_name" in
     )"
 
     # Eval scans ALL device files (no filtering) and generates full lock file
-    # Use 'select' command to choose specific devices
+    # Set ANDROID_DEVICES env var in devbox.json to filter devices
 
     # Check we have at least one device
     device_count="$(printf '%s\n' "$devices_json" | jq '. | length')"
@@ -603,6 +504,85 @@ case "$command_name" in
     device_count="$(jq '.devices | length' "$lock_file_path")"
     api_list="$(jq -r '.devices | map(.api) | join(",")' "$lock_file_path")"
     echo "Lock file generated: ${device_count} devices with APIs ${api_list}"
+    ;;
+
+  # --------------------------------------------------------------------------
+  # Sync: Ensure AVDs match device definitions
+  # --------------------------------------------------------------------------
+  sync)
+    # Source avd.sh for AVD management functions
+    if [ ! -f "${scripts_dir}/avd.sh" ]; then
+      echo "ERROR: avd.sh not found in ${scripts_dir}" >&2
+      exit 1
+    fi
+    . "${scripts_dir}/avd.sh"
+
+    # Check if devices.lock exists
+    if [ ! -f "$lock_file_path" ]; then
+      echo "ERROR: devices.lock not found at $lock_file_path" >&2
+      echo "       Run 'devices.sh eval' first or ensure ANDROID_DEVICES is set" >&2
+      exit 1
+    fi
+
+    # Validate lock file format
+    if ! jq -e '.devices' "$lock_file_path" >/dev/null 2>&1; then
+      echo "ERROR: Invalid devices.lock format" >&2
+      exit 1
+    fi
+
+    # Get device count
+    device_count="$(jq '.devices | length' "$lock_file_path")"
+    if [ "$device_count" -eq 0 ]; then
+      echo "No devices defined in lock file"
+      exit 0
+    fi
+
+    echo "Syncing AVDs with device definitions..."
+    echo "================================================"
+
+    # Counters for summary
+    matched=0
+    recreated=0
+    created=0
+    skipped=0
+
+    # Create temp files for each device definition
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf "$temp_dir"' EXIT
+
+    # Extract each device from lock file and sync
+    device_index=0
+    while [ "$device_index" -lt "$device_count" ]; do
+      device_json="$temp_dir/device_${device_index}.json"
+      jq -c ".devices[$device_index]" "$lock_file_path" > "$device_json"
+
+      # Call ensure function and track result
+      if android_ensure_avd_from_definition "$device_json"; then
+        result=$?
+        case $result in
+          0) matched=$((matched + 1)) ;;
+          1) recreated=$((recreated + 1)) ;;
+          2) created=$((created + 1)) ;;
+        esac
+      else
+        skipped=$((skipped + 1))
+      fi
+
+      device_index=$((device_index + 1))
+    done
+
+    echo "================================================"
+    echo "Sync complete:"
+    echo "  ✓ Matched:   $matched"
+    if [ "$recreated" -gt 0 ]; then
+      echo "  🔄 Recreated: $recreated"
+    fi
+    if [ "$created" -gt 0 ]; then
+      echo "  ➕ Created:   $created"
+    fi
+    if [ "$skipped" -gt 0 ]; then
+      echo "  ⚠ Skipped:   $skipped"
+    fi
     ;;
 
   # --------------------------------------------------------------------------

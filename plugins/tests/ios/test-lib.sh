@@ -41,50 +41,90 @@ if [ "$result" != "Test Device" ]; then
 fi
 echo "    PASS"
 
-# Test 4: ios_config_path fallback
+# Create temporary test directory structure
+test_root="/tmp/ios-plugin-test-$$"
+mkdir -p "$test_root/devbox.d/ios/devices"
+
+# Create test device files
+cat > "$test_root/devbox.d/ios/devices/test1.json" <<'EOF'
+{
+  "name": "iPhone 15 Pro",
+  "runtime": "17.5"
+}
+EOF
+
+cat > "$test_root/devbox.d/ios/devices/test2.json" <<'EOF'
+{
+  "name": "iPhone 16",
+  "runtime": "18.0"
+}
+EOF
+
+# Test 4: ios_config_path
 echo "  Test 4: ios_config_path"
 unset IOS_CONFIG_DIR
-DEVBOX_PROJECT_ROOT="${SCRIPT_DIR}/../../.."
+DEVBOX_PROJECT_ROOT="$test_root"
 export DEVBOX_PROJECT_ROOT
-if ! config_path="$(ios_config_path 2>/dev/null)"; then
-  echo "    SKIP: No config found (expected in test environment)"
-else
-  if [ ! -f "$config_path" ]; then
-    echo "    FAIL: config_path returned non-existent file: $config_path"
-    exit 1
-  fi
-  echo "    PASS"
+config_path="$(ios_config_path 2>/dev/null || true)"
+if [ -z "$config_path" ]; then
+  echo "    FAIL: ios_config_path returned empty"
+  rm -rf "$test_root"
+  exit 1
 fi
+expected="$test_root/devbox.d/ios"
+if [ "$config_path" != "$expected" ]; then
+  echo "    FAIL: Expected '$expected', got '$config_path'"
+  rm -rf "$test_root"
+  exit 1
+fi
+echo "    PASS"
 
-# Test 5: ios_devices_dir fallback
+# Test 5: ios_devices_dir
 echo "  Test 5: ios_devices_dir"
 unset IOS_DEVICES_DIR
-if ! devices_dir="$(ios_devices_dir 2>/dev/null)"; then
-  echo "    SKIP: No devices dir found (expected in test environment)"
-else
-  if [ ! -d "$devices_dir" ]; then
-    echo "    FAIL: devices_dir returned non-existent directory: $devices_dir"
-    exit 1
-  fi
-  echo "    PASS"
+devices_dir="$(ios_devices_dir 2>/dev/null || true)"
+if [ -z "$devices_dir" ]; then
+  echo "    FAIL: ios_devices_dir returned empty"
+  rm -rf "$test_root"
+  exit 1
 fi
+expected="$test_root/devbox.d/ios/devices"
+if [ "$devices_dir" != "$expected" ]; then
+  echo "    FAIL: Expected '$expected', got '$devices_dir'"
+  rm -rf "$test_root"
+  exit 1
+fi
+if [ ! -d "$devices_dir" ]; then
+  echo "    FAIL: devices_dir doesn't exist: $devices_dir"
+  rm -rf "$test_root"
+  exit 1
+fi
+echo "    PASS"
 
 # Test 6: ios_compute_devices_checksum
 echo "  Test 6: ios_compute_devices_checksum"
-if devices_dir="$(ios_devices_dir 2>/dev/null)"; then
-  checksum="$(ios_compute_devices_checksum "$devices_dir" || true)"
-  if [ -z "$checksum" ]; then
-    echo "    FAIL: Checksum computation failed"
-    exit 1
-  fi
-  if [ "${#checksum}" -ne 64 ]; then
-    echo "    FAIL: Checksum length is not 64 characters: ${#checksum}"
-    exit 1
-  fi
-  echo "    PASS"
-else
-  echo "    SKIP: No devices dir found"
+checksum1="$(ios_compute_devices_checksum "$devices_dir" || true)"
+if [ -z "$checksum1" ]; then
+  echo "    FAIL: Checksum computation failed"
+  rm -rf "$test_root"
+  exit 1
 fi
+if [ "${#checksum1}" -ne 64 ]; then
+  echo "    FAIL: Checksum length is not 64 characters: ${#checksum1}"
+  rm -rf "$test_root"
+  exit 1
+fi
+# Test checksum stability
+checksum2="$(ios_compute_devices_checksum "$devices_dir" || true)"
+if [ "$checksum1" != "$checksum2" ]; then
+  echo "    FAIL: Checksum not stable - got different results"
+  rm -rf "$test_root"
+  exit 1
+fi
+echo "    PASS"
+
+# Cleanup test directory
+rm -rf "$test_root"
 
 # Test 7: ios_require_jq
 echo "  Test 7: ios_require_jq"

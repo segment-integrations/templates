@@ -1,0 +1,123 @@
+version: "0.5"
+
+environment:
+  - "ANDROID_SERIAL=emulator-5554"
+  - "TEST_TIMEOUT=300"
+  - "BOOT_TIMEOUT=180"
+
+log_location: "/tmp/react-native-android-e2e-logs"
+log_level: info
+
+processes:
+  # Phase 1: Build Node dependencies and Android app
+  build-node:
+    command: "devbox run --pure build:node"
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "test -d node_modules"
+      initial_delay_seconds: 2
+      period_seconds: 5
+      timeout_seconds: 180
+      success_threshold: 1
+
+  build-android:
+    command: "cd android && gradle assembleDebug"
+    depends_on:
+      build-node:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "test -f ${ANDROID_APP_APK:-android/app/build/outputs/apk/debug/app-debug.apk}"
+      initial_delay_seconds: 5
+      period_seconds: 5
+      timeout_seconds: 300
+      success_threshold: 1
+
+  # Phase 2a: Sync AVDs - ensure all AVDs match device definitions
+  sync-avds:
+    command: "devbox run android.sh devices sync"
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "echo 'Sync complete'"
+      initial_delay_seconds: 1
+      period_seconds: 2
+      timeout_seconds: 120
+      success_threshold: 1
+
+  # Phase 2b: Start emulator (depends on sync completing)
+  android-emulator:
+    depends_on:
+      sync-avds:
+        condition: process_completed_successfully
+    command: "devbox run --pure start:emu ${ANDROID_DEFAULT_DEVICE:-max}"
+    availability:
+      restart: "on_failure"
+      max_restarts: 2
+    readiness_probe:
+      exec:
+        command: "adb -s ${ANDROID_SERIAL} shell getprop sys.boot_completed | grep -q 1"
+      initial_delay_seconds: 10
+      period_seconds: 3
+      timeout_seconds: 180
+      success_threshold: 1
+      failure_threshold: 3
+    liveness_probe:
+      exec:
+        command: "adb devices | grep -q ${ANDROID_SERIAL}"
+      initial_delay_seconds: 15
+      period_seconds: 10
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 3
+    shutdown:
+      command: "devbox run --pure stop:emu"
+      timeout_seconds: 30
+
+  # Phase 3: Deploy React Native app
+  deploy-android:
+    command: "npx react-native run-android --no-packager"
+    depends_on:
+      build-android:
+        condition: process_completed_successfully
+      android-emulator:
+        condition: process_healthy
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "adb -s ${ANDROID_SERIAL} shell pm list packages | grep -q ${ANDROID_APP_ID:-com.example.devbox}"
+      initial_delay_seconds: 5
+      period_seconds: 3
+      timeout_seconds: 60
+      success_threshold: 1
+
+  # Phase 4: Verification - runs after deployment
+  verify-app-running:
+    command: "adb -s ${ANDROID_SERIAL} shell pidof ${ANDROID_APP_ID:-com.example.devbox}"
+    depends_on:
+      deploy-android:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "adb -s ${ANDROID_SERIAL} shell pidof ${ANDROID_APP_ID:-com.example.devbox}"
+      initial_delay_seconds: 2
+      period_seconds: 3
+      timeout_seconds: 30
+      success_threshold: 1
+
+  # Cleanup - runs at the end
+  cleanup:
+    command: "echo 'Cleanup complete' && devbox run --pure stop:emu || true"
+    depends_on:
+      verify-app-running:
+        condition: process_completed
+    availability:
+      restart: "no"

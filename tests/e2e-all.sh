@@ -77,7 +77,6 @@ test_android() {
     echo ""
     echo "✓ Android example E2E test passed!"
   } > "$ANDROID_LOG" 2>&1
-  return $?
 }
 
 # Test iOS example
@@ -105,7 +104,6 @@ test_ios() {
     echo ""
     echo "✓ iOS example E2E test passed!"
   } > "$IOS_LOG" 2>&1
-  return $?
 }
 
 # Test React Native example (both platforms)
@@ -157,7 +155,6 @@ test_react_native() {
     echo ""
     echo "✓ React Native example E2E test passed!"
   } > "$REACT_NATIVE_LOG" 2>&1
-  return $?
 }
 
 # Stream log file with prefix

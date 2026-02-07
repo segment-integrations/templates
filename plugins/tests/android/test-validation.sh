@@ -5,7 +5,7 @@ echo "Android Validation Tests"
 echo "========================"
 echo ""
 
-cd "$(dirname "$0")/../../examples/android" 2>/dev/null || {
+cd "$(dirname "$0")/../../../examples/android" 2>/dev/null || {
   echo "Error: Android example directory not found"
   exit 1
 }
@@ -13,43 +13,43 @@ cd "$(dirname "$0")/../../examples/android" 2>/dev/null || {
 # Source test framework
 . "../../plugins/tests/test-framework.sh"
 
-# Test 1: Stale lock file warning
-echo "Test: Validation warns about stale lock file..."
+# Test 1: Doctor command runs successfully
+echo "Test: Doctor command validation..."
+assert_command_success "Doctor command runs" \
+  bash -c "devbox run doctor >/dev/null 2>&1"
 
-# Ensure lock file exists
+# Test 2: Verify setup command
+echo "Test: Verify setup command..."
+assert_command_success "Verify setup succeeds" \
+  bash -c "devbox run verify:setup >/dev/null 2>&1"
+
+# Test 3: Lock file has valid checksum
+echo "Test: Lock file checksum validation..."
 devbox run --pure android.sh devices eval >/dev/null 2>&1 || true
 
-# Add a temporary device to make lock file stale
-echo '{"name":"temp_test","api":99,"device":"pixel"}' > devbox.d/android/devices/temp_test.json
-
-# Run shell and capture warnings
-output=$(devbox shell -c "exit" 2>&1 || true)
-
-if echo "$output" | grep -q "stale"; then
-  ((TEST_PASS++))
-  echo "✓ Stale lock file warning appears"
+if [ -f "devbox.d/android/devices/devices.lock" ]; then
+  # Check if lock file has content
+  if [ -s "devbox.d/android/devices/devices.lock" ]; then
+    TEST_PASS=$((TEST_PASS + 1))
+    echo "✓ Lock file has valid content"
+  else
+    TEST_FAIL=$((TEST_FAIL + 1))
+    echo "✗ Lock file is empty"
+  fi
 else
-  ((TEST_FAIL++))
-  echo "✗ Stale lock file warning not shown"
-  echo "  Output: $output"
+  TEST_FAIL=$((TEST_FAIL + 1))
+  echo "✗ Lock file not found"
 fi
 
-# Clean up
-rm -f devbox.d/android/devices/temp_test.json
-
-# Regenerate lock file
-devbox run --pure android.sh devices eval >/dev/null 2>&1 || true
-
-# Test 2: No warning after fixing
-echo "Test: No warning after lock file regeneration..."
-output=$(devbox shell -c "exit" 2>&1 || true)
-
-if echo "$output" | grep -q "stale"; then
-  ((TEST_FAIL++))
-  echo "✗ Warning still appears after fix"
+# Test 4: Config show displays configuration
+echo "Test: Config displays configuration..."
+output=$(devbox run --pure android.sh config show 2>&1 || true)
+if echo "$output" | grep -q "ANDROID_DEFAULT_DEVICE"; then
+  TEST_PASS=$((TEST_PASS + 1))
+  echo "✓ Config displays configuration values"
 else
-  ((TEST_PASS++))
-  echo "✓ No warning after fixing lock file"
+  TEST_FAIL=$((TEST_FAIL + 1))
+  echo "✗ Config output incomplete"
 fi
 
 test_summary

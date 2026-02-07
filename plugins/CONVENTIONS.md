@@ -97,7 +97,7 @@ All plugins implement TTL-based caching (1 hour) for expensive operations:
 
 ### Cache Files
 - `.xcode_dev_dir.cache` - Xcode developer directory path
-- `.nix_sdk_eval.cache` - Nix SDK evaluation output
+- Note: Nix handles flake evaluation caching internally - no custom cache files needed
 - `.shellenv.cache` - DevBox shellenv export commands
 
 ## Validation Patterns

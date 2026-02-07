@@ -110,7 +110,7 @@ iOS simulator workflows require macOS and cannot run in Docker containers. For l
 **Option 1: Run iOS tests natively**
 ```bash
 # Must be on macOS
-cd devbox/examples/ios
+cd examples/ios
 devbox shell
 SIM_HEADLESS=1 devbox run --pure start-sim min
 ```

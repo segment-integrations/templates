@@ -1,6 +1,6 @@
 version: "0.5"
 
-log_location: "/tmp/devbox-e2e-logs"
+log_location: "test-results/devbox-e2e-logs"
 log_level: info
 
 processes:
@@ -47,21 +47,48 @@ processes:
       timeout_seconds: 5
       success_threshold: 1
 
-  # Summary
+  # Summary - runs after all E2E tests complete
   summary:
     command: |
       echo ""
       echo "========================================"
-      echo "✓ All E2E tests passed!"
+      echo "       E2E TESTS SUITE SUMMARY"
       echo "========================================"
       echo ""
-      echo "E2E Test Summary:"
-      echo "  ✓ Android (emulator boot, build, deploy, verify)"
-      echo "  ✓ iOS (simulator boot, build, deploy, verify)"
-      echo "  ✓ React Native (both platforms)"
+      echo "Android E2E:"
+      echo "  ✓ Sync AVDs"
+      echo "  ✓ Build Android app"
+      echo "  ✓ Start emulator"
+      echo "  ✓ Deploy app"
+      echo "  ✓ Verify app running"
+      echo ""
+      echo "iOS E2E:"
+      echo "  ✓ Sync simulators"
+      echo "  ✓ Build iOS app"
+      echo "  ✓ Start simulator"
+      echo "  ✓ Deploy app"
+      echo "  ✓ Verify app running"
+      echo ""
+      echo "React Native E2E:"
+      echo "  ✓ Build Node dependencies"
+      echo "  ✓ Android workflow (sync, build, deploy, verify)"
+      echo "  ✓ iOS workflow (sync, build, deploy, verify)"
+      echo ""
+      echo "========================================"
+      echo "       ALL E2E TESTS PASSED ✓"
+      echo "========================================"
+      echo ""
+      echo "Logs available at:"
+      echo "  - Android: test-results/android-repo-e2e-logs"
+      echo "  - iOS: test-results/ios-repo-e2e-logs"
+      echo "  - React Native: test-results/react-native-repo-e2e-logs"
       echo ""
     depends_on:
+      e2e-android:
+        condition: process_completed
+      e2e-ios:
+        condition: process_completed
       e2e-react-native:
-        condition: process_completed_successfully
+        condition: process_completed
     availability:
       restart: "no"

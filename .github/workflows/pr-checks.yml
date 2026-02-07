@@ -31,7 +31,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: lint-logs
-          path: /tmp/devbox-lint-logs/
+          path: test-results/devbox-lint-logs/
           retention-days: 7
 
   android-plugin-tests:
@@ -71,7 +71,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: android-plugin-test-logs
-          path: /tmp/devbox-unit-tests-logs/test-android-*
+          path: test-results/devbox-unit-tests-logs/test-android-*
           retention-days: 7
 
   ios-plugin-tests:
@@ -114,7 +114,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ios-plugin-test-logs
-          path: /tmp/devbox-unit-tests-logs/test-ios-*
+          path: test-results/devbox-unit-tests-logs/test-ios-*
           retention-days: 7
 
   android-quick-smoke:
@@ -143,6 +143,7 @@ jobs:
           BOOT_TIMEOUT: 180
           TEST_TIMEOUT: 300
           ANDROID_DEFAULT_DEVICE: min
+          TEST_TUI: false
         run: bash ../../tests/e2e-android-orchestrated.sh
 
       - name: Upload logs
@@ -177,6 +178,7 @@ jobs:
           SIM_HEADLESS: 1
           BOOT_TIMEOUT: 120
           TEST_TIMEOUT: 300
+          TEST_TUI: false
         run: bash ../../tests/e2e-ios-orchestrated.sh
 
       - name: Upload logs

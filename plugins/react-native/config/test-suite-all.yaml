@@ -1,0 +1,225 @@
+version: "0.5"
+
+environment:
+  - "ANDROID_SERIAL=emulator-5554"
+  - "IOS_DEVICE=${IOS_DEFAULT_DEVICE:-max}"
+  - "TEST_TIMEOUT=300"
+  - "BOOT_TIMEOUT=180"
+
+log_location: "/tmp/react-native-all-e2e-logs"
+log_level: info
+
+processes:
+  # Phase 1: Build Node dependencies (shared by both platforms)
+  build-node:
+    command: "devbox run --pure build:node"
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "test -d node_modules"
+      initial_delay_seconds: 2
+      period_seconds: 5
+      timeout_seconds: 180
+      success_threshold: 1
+
+  # Phase 2a: Android build
+  build-android:
+    command: "cd android && gradle assembleDebug"
+    depends_on:
+      build-node:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "test -f ${ANDROID_APP_APK:-android/app/build/outputs/apk/debug/app-debug.apk}"
+      initial_delay_seconds: 5
+      period_seconds: 5
+      timeout_seconds: 300
+      success_threshold: 1
+
+  # Phase 2b: iOS build (parallel with Android)
+  build-ios:
+    command: "cd ios && env -u LD -u LDFLAGS -u NIX_LDFLAGS -u NIX_CFLAGS_COMPILE -u NIX_CFLAGS_LINK xcodebuild -project ${IOS_APP_PROJECT:-*.xcodeproj} -scheme ${IOS_APP_SCHEME:-$(basename ${IOS_APP_PROJECT:-*.xcodeproj} .xcodeproj)} -configuration Debug -destination 'generic/platform=iOS Simulator' -derivedDataPath ../.devbox/virtenv/ios/DerivedData build"
+    depends_on:
+      build-node:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "test -d ${IOS_APP_ARTIFACT:-../.devbox/virtenv/ios/DerivedData/Build/Products/Debug-iphonesimulator/*.app}"
+      initial_delay_seconds: 5
+      period_seconds: 5
+      timeout_seconds: 300
+      success_threshold: 1
+
+  # Phase 3a: Sync Android AVDs
+  sync-avds:
+    command: "devbox run android.sh devices sync"
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "echo 'Sync complete'"
+      initial_delay_seconds: 1
+      period_seconds: 2
+      timeout_seconds: 120
+      success_threshold: 1
+
+  # Phase 3b: Sync iOS simulators (parallel with Android)
+  sync-simulators:
+    command: "devbox run ios.sh devices sync"
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "echo 'Sync complete'"
+      initial_delay_seconds: 1
+      period_seconds: 2
+      timeout_seconds: 120
+      success_threshold: 1
+
+  # Phase 4a: Start Android emulator
+  android-emulator:
+    depends_on:
+      sync-avds:
+        condition: process_completed_successfully
+    command: "devbox run --pure start:emu ${ANDROID_DEFAULT_DEVICE:-max}"
+    availability:
+      restart: "on_failure"
+      max_restarts: 2
+    readiness_probe:
+      exec:
+        command: "adb -s ${ANDROID_SERIAL} shell getprop sys.boot_completed | grep -q 1"
+      initial_delay_seconds: 10
+      period_seconds: 3
+      timeout_seconds: 180
+      success_threshold: 1
+      failure_threshold: 3
+    liveness_probe:
+      exec:
+        command: "adb devices | grep -q ${ANDROID_SERIAL}"
+      initial_delay_seconds: 15
+      period_seconds: 10
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 3
+    shutdown:
+      command: "devbox run --pure stop:emu"
+      timeout_seconds: 30
+
+  # Phase 4b: Start iOS simulator (parallel with Android)
+  ios-simulator:
+    command: "devbox run --pure start:sim ${IOS_DEVICE}"
+    depends_on:
+      sync-simulators:
+        condition: process_completed_successfully
+    availability:
+      restart: "on_failure"
+      max_restarts: 2
+    readiness_probe:
+      exec:
+        command: "xcrun simctl list devices | grep ${IOS_DEVICE} | grep -q '(Booted)'"
+      initial_delay_seconds: 5
+      period_seconds: 3
+      timeout_seconds: 120
+      success_threshold: 1
+      failure_threshold: 3
+    liveness_probe:
+      exec:
+        command: "xcrun simctl list devices | grep ${IOS_DEVICE} | grep -q '(Booted)'"
+      initial_delay_seconds: 10
+      period_seconds: 10
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 3
+    shutdown:
+      command: "devbox run --pure stop:sim"
+      timeout_seconds: 30
+
+  # Phase 5a: Deploy Android app
+  deploy-android:
+    command: "npx react-native run-android --no-packager"
+    depends_on:
+      build-android:
+        condition: process_completed_successfully
+      android-emulator:
+        condition: process_healthy
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "adb -s ${ANDROID_SERIAL} shell pm list packages | grep -q ${ANDROID_APP_ID:-com.example.devbox}"
+      initial_delay_seconds: 5
+      period_seconds: 3
+      timeout_seconds: 60
+      success_threshold: 1
+
+  # Phase 5b: Deploy iOS app (parallel with Android)
+  deploy-ios:
+    command: "npx react-native run-ios --no-packager --simulator='${IOS_DEVICE}'"
+    depends_on:
+      build-ios:
+        condition: process_completed_successfully
+      ios-simulator:
+        condition: process_healthy
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: |
+          DEVICE_UDID=$(xcrun simctl list devices | grep ${IOS_DEVICE} | grep -oE '[0-9A-F-]{36}' | head -1)
+          xcrun simctl get_app_container "$DEVICE_UDID" "${IOS_APP_BUNDLE_ID:-com.example.devbox}" >/dev/null 2>&1
+      initial_delay_seconds: 5
+      period_seconds: 3
+      timeout_seconds: 60
+      success_threshold: 1
+
+  # Phase 6a: Verify Android app
+  verify-android-running:
+    command: "adb -s ${ANDROID_SERIAL} shell pidof ${ANDROID_APP_ID:-com.example.devbox}"
+    depends_on:
+      deploy-android:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: "adb -s ${ANDROID_SERIAL} shell pidof ${ANDROID_APP_ID:-com.example.devbox}"
+      initial_delay_seconds: 2
+      period_seconds: 3
+      timeout_seconds: 30
+      success_threshold: 1
+
+  # Phase 6b: Verify iOS app (parallel with Android)
+  verify-ios-running:
+    command: |
+      DEVICE_UDID=$(xcrun simctl list devices | grep ${IOS_DEVICE} | grep -oE '[0-9A-F-]{36}' | head -1)
+      xcrun simctl spawn "$DEVICE_UDID" launchctl list | grep -q "${IOS_APP_BUNDLE_ID:-com.example.devbox}"
+    depends_on:
+      deploy-ios:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"
+    readiness_probe:
+      exec:
+        command: |
+          DEVICE_UDID=$(xcrun simctl list devices | grep ${IOS_DEVICE} | grep -oE '[0-9A-F-]{36}' | head -1)
+          xcrun simctl spawn "$DEVICE_UDID" launchctl list | grep -q "${IOS_APP_BUNDLE_ID:-com.example.devbox}"
+      initial_delay_seconds: 2
+      period_seconds: 3
+      timeout_seconds: 30
+      success_threshold: 1
+
+  # Cleanup - runs when both platforms complete
+  cleanup:
+    command: "echo 'Cleanup complete' && devbox run --pure stop:emu || true && devbox run --pure stop:sim || true"
+    depends_on:
+      verify-android-running:
+        condition: process_completed
+      verify-ios-running:
+        condition: process_completed
+    availability:
+      restart: "no"

@@ -23,31 +23,28 @@ echo ""
 
 # Setup test environment
 test_root="/tmp/android-plugin-device-test-$$"
-mkdir -p "$test_root/devbox.d/android/devices"
-mkdir -p "$test_root/devbox.d/android/scripts"
+mkdir -p "$test_root/devices"
+mkdir -p "$test_root/scripts"
 
 # Copy required scripts
 script_dir="$(cd "$(dirname "$0")" && pwd)"
-cp "$script_dir/../../android/scripts/lib.sh" "$test_root/devbox.d/android/scripts/"
-cp "$script_dir/../../android/scripts/devices.sh" "$test_root/devbox.d/android/scripts/"
+cp "$script_dir/../../android/scripts/lib.sh" "$test_root/scripts/"
+cp "$script_dir/../../android/scripts/env.sh" "$test_root/scripts/"
+cp "$script_dir/../../android/scripts/devices.sh" "$test_root/scripts/"
 
-# Create minimal config
-cat > "$test_root/devbox.d/android/android.json" <<'EOF'
-{
-  "ANDROID_DEFAULT_DEVICE": "",
-  "EVALUATE_DEVICES": []
-}
-EOF
+# Set environment variables (new config approach)
+export ANDROID_CONFIG_DIR="$test_root"
+export ANDROID_DEVICES_DIR="$test_root/devices"
+export ANDROID_SCRIPTS_DIR="$test_root/scripts"
+export ANDROID_DEVICES=""  # Empty = all devices
+export ANDROID_DEFAULT_DEVICE=""
 
-export ANDROID_CONFIG_DIR="$test_root/devbox.d/android"
-export ANDROID_SCRIPTS_DIR="$test_root/devbox.d/android/scripts"
-
-devices_script="$test_root/devbox.d/android/scripts/devices.sh"
+devices_script="$test_root/scripts/devices.sh"
 
 # Test: Create device
 echo "TEST: Create device"
 assert_success "$devices_script create test_pixel --api 28 --device pixel --tag google_apis" "Create device"
-assert_success "[ -f '$test_root/devbox.d/android/devices/test_pixel.json' ]" "Device file created"
+assert_success "[ -f '$test_root/devices/test_pixel.json' ]" "Device file created"
 
 # Test: List devices
 echo ""
@@ -65,24 +62,20 @@ echo "TEST: Update device"
 assert_success "$devices_script update test_pixel --api 34" "Update device API"
 assert_success "$devices_script show test_pixel | grep -q '\"api\": 34'" "Device updated correctly"
 
-# Test: Select devices
+# Test: Eval (generate lock file) - with specific device selected
 echo ""
-echo "TEST: Select device"
-assert_success "$devices_script select test_pixel" "Select device"
-assert_success "jq -e '.devices[] | select(.name == \"test_pixel\")' '$test_root/devbox.d/android/devices.lock.json' >/dev/null" "Device recorded in lock file"
-
-# Test: Eval (generate lock file)
-echo ""
-echo "TEST: Generate lock file"
+echo "TEST: Generate lock file with device selection"
+export ANDROID_DEVICES="test_pixel"
 assert_success "$devices_script eval" "Generate lock file"
-assert_success "[ -f '$test_root/devbox.d/android/devices.lock.json' ]" "Lock file created"
-assert_success "grep -q '34' '$test_root/devbox.d/android/devices.lock.json'" "Lock file contains API 34"
+assert_success "[ -f '$test_root/devices/devices.lock' ]" "Lock file created"
+assert_success "grep -q 'test_pixel' '$test_root/devices/devices.lock'" "Lock file contains device name"
+assert_success "grep -q '34' '$test_root/devices/devices.lock'" "Lock file contains API 34"
 
 # Test: Delete device
 echo ""
 echo "TEST: Delete device"
 assert_success "$devices_script delete test_pixel" "Delete device"
-assert_success "[ ! -f '$test_root/devbox.d/android/devices/test_pixel.json' ]" "Device file removed"
+assert_success "[ ! -f '$test_root/devices/test_pixel.json' ]" "Device file removed"
 
 # Cleanup
 rm -rf "$test_root"

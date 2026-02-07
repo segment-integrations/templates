@@ -8,6 +8,7 @@
     "ANDROID_EMULATOR_HOME": "{{ .Virtenv }}/android",
     "ANDROID_CONFIG_DIR": "{{ .DevboxDir }}",
     "ANDROID_DEVICES_DIR": "{{ .DevboxDir }}/devices",
+    "ANDROID_DEVICES": "",
     "ANDROID_SCRIPTS_DIR": "{{ .Virtenv }}/scripts",
     "ANDROID_FLAKE_DIR": "{{ .Virtenv }}",
     "ANDROID_LOCAL_SDK": "0",
@@ -21,7 +22,8 @@
     "ANDROID_NDK_VERSION": "27.0.12077973",
     "ANDROID_INCLUDE_CMAKE": "false",
     "ANDROID_CMAKE_VERSION": "3.22.1",
-    "ANDROID_CMDLINE_TOOLS_VERSION": "19.0"
+    "ANDROID_CMDLINE_TOOLS_VERSION": "19.0",
+    "ANDROID_DISABLE_SNAPSHOTS": "0"
   },
   "packages": {
     "bash": "latest",
@@ -31,12 +33,14 @@
     "gawk": "latest",
     "jq": "latest",
     "jdk17": "latest",
-    "gradle": "latest"
+    "gradle": "latest",
+    "process-compose": "latest"
   },
   "create_files": {
     "{{ .Virtenv }}/android": "",
     "{{ .Virtenv }}/android/avd": "",
     "{{ .Virtenv }}/process-compose.yaml": "config/process-compose.yaml",
+    "{{ .Virtenv }}/test-suite.yaml": "config/test-suite.yaml",
     "{{ .Virtenv }}/scripts/env.sh": "scripts/env.sh",
     "{{ .Virtenv }}/scripts/lib.sh": "scripts/lib.sh",
     "{{ .Virtenv }}/scripts/avd.sh": "scripts/avd.sh",
@@ -56,6 +60,9 @@
       ". {{ .Virtenv }}/scripts/env.sh"
     ],
     "scripts": {
+      "android:devices:eval": [
+        "ANDROID_SDK_REQUIRED=0 android.sh devices eval"
+      ],
       "build:android": [
         "echo 'Building Android app...'",
         "gradle assembleDebug --info"
@@ -69,28 +76,51 @@
       ],
       "test:android:e2e": [
         "echo 'Starting Android E2E tests...'",
-        ". {{ .Virtenv }}/scripts/avd.sh",
         "android_start_emulator \"${1:-}\"",
         "gradle connectedAndroidTest",
         "android_stop_emulator"
       ],
+      "test:e2e": [
+        "process-compose -f {{ .Virtenv }}/test-suite.yaml --no-server --tui=${TEST_TUI:-true}"
+      ],
       "start:emu": [
-        ". {{ .Virtenv }}/scripts/avd.sh",
         "android_start_emulator \"${1:-}\""
       ],
       "start:android": [
-        ". {{ .Virtenv }}/scripts/avd.sh",
         "android_run_app \"${1-}\""
       ],
       "stop:emu": [
-        ". {{ .Virtenv }}/scripts/avd.sh",
         "android_stop_emulator"
       ],
       "reset:emu": [
         "echo 'Resetting Android emulators...'",
-        ". {{ .Virtenv }}/scripts/avd.sh",
         "android_stop_emulator",
         "android_reset_avds"
+      ],
+      "doctor": [
+        "echo 'Android Environment Check'",
+        "echo '========================='",
+        "echo ''",
+        "echo 'ANDROID_SDK_ROOT:' ${ANDROID_SDK_ROOT:-'NOT SET'}",
+        "test -n \"${ANDROID_SDK_ROOT}\" && echo '✓ ANDROID_SDK_ROOT is set' || echo '✗ ANDROID_SDK_ROOT is not set'",
+        "test -d \"${ANDROID_SDK_ROOT}\" && echo '✓ ANDROID_SDK_ROOT directory exists' || echo '✗ ANDROID_SDK_ROOT directory does not exist'",
+        "echo ''",
+        "echo 'ANDROID_AVD_HOME:' ${ANDROID_AVD_HOME:-'NOT SET'}",
+        "test -w \"${ANDROID_AVD_HOME}\" && echo '✓ ANDROID_AVD_HOME is writable' || echo '✗ ANDROID_AVD_HOME is not writable'",
+        "echo ''",
+        "command -v adb >/dev/null 2>&1 && echo '✓ adb is in PATH' || echo '✗ adb is not in PATH'",
+        "command -v emulator >/dev/null 2>&1 && echo '✓ emulator is in PATH' || echo '✗ emulator is not in PATH'",
+        "command -v avdmanager >/dev/null 2>&1 && echo '✓ avdmanager is in PATH' || echo '✗ avdmanager is not in PATH'",
+        "echo ''",
+        "echo 'Device Definitions:'",
+        "ls -1 ${ANDROID_DEVICES_DIR}/*.json 2>/dev/null | wc -l | xargs echo '  Count:'",
+        "echo '  ANDROID_DEVICES:' ${ANDROID_DEVICES:-'(all devices)'}",
+        "echo ''",
+        "test -f ${ANDROID_DEVICES_DIR}/devices.lock && echo '✓ Lock file exists' || echo '⚠ Lock file not generated yet (run devbox shell)'",
+        "echo ''"
+      ],
+      "verify:setup": [
+        "test -n \"${ANDROID_SDK_ROOT}\" && test -d \"${ANDROID_SDK_ROOT}\" && command -v adb >/dev/null 2>&1 && echo '✓ Android environment OK' || (echo '✗ Android environment check failed. Run: devbox run doctor' && exit 1)"
       ]
     }
   }

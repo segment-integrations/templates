@@ -139,18 +139,18 @@ ios_device_files() {
   find "$dir" -type f -name '*.json' | sort
 }
 
-# List device files selected by EVALUATE_DEVICES config
+# List device files selected by IOS_DEVICES config
 # Args: devices_dir
 # Returns: filtered list of device files
 ios_selected_device_files() {
   devices_dir="$1"
-  config_path="$(ios_config_path 2>/dev/null || true)"
-  if [ -z "$config_path" ] || [ ! -f "$config_path" ]; then
-    ios_device_files "$devices_dir"
-    return 0
-  fi
-  selections="$(jq -r '.EVALUATE_DEVICES // [] | if length == 0 then empty else .[] end' "$config_path")"
+
+  # Read IOS_DEVICES from environment (comma or space separated)
+  selections="${IOS_DEVICES:-}"
+  selections="$(echo "$selections" | tr ',' ' ')"
+
   if [ -z "$selections" ]; then
+    # Empty = all devices
     ios_device_files "$devices_dir"
     return 0
   fi
@@ -169,7 +169,7 @@ ios_selected_device_files() {
     done
   done
   if [ -z "$matched" ]; then
-    echo "No iOS device definitions matched EVALUATE_DEVICES in ${config_path}." >&2
+    echo "No iOS device definitions matched IOS_DEVICES='${IOS_DEVICES}'." >&2
     return 1
   fi
   printf '%s' "$matched"
@@ -315,6 +315,103 @@ ensure_device() {
   echo "Creating ${display_name}..."
   xcrun simctl create "$display_name" "$device_type" "$runtime_id"
   echo "Created ${display_name}"
+}
+
+# ============================================================================
+# Device Sync - Ensure device matches definition
+# ============================================================================
+
+# Get runtime version for an existing device
+# Args: device_name
+# Returns: runtime version (e.g., "17.5") or empty
+ios_get_device_runtime() {
+  device_name="$1"
+
+  # Get device info from simctl
+  device_info="$(xcrun simctl list devices -j | jq -r --arg name "$device_name" \
+    '.devices[][]? | select(.name == $name) | .udid + "|" + (.deviceTypeIdentifier // "")')"
+
+  if [ -z "$device_info" ]; then
+    return 1
+  fi
+
+  udid="$(printf '%s' "$device_info" | cut -d'|' -f1)"
+
+  # Get runtime for this device
+  runtime="$(xcrun simctl list devices -j | jq -r --arg udid "$udid" \
+    '.devices | to_entries[] | select(.value[]?.udid == $udid) | .key' | sed 's/.*iOS \(.*\)).*/\1/' || true)"
+
+  if [ -n "$runtime" ]; then
+    printf '%s\n' "$runtime"
+    return 0
+  fi
+
+  return 1
+}
+
+# Ensure device matches definition, recreating if necessary
+# Args: device_json_path
+# Returns: 0=matched, 1=recreated, 2=created
+ios_ensure_device_from_definition() {
+  device_json="$1"
+
+  if [ ! -f "$device_json" ]; then
+    echo "ERROR: Device definition not found: $device_json" >&2
+    return 1
+  fi
+
+  # Parse device definition
+  name="$(jq -r '.name // empty' "$device_json")"
+  runtime="$(jq -r '.runtime // empty' "$device_json")"
+
+  if [ -z "$name" ] || [ -z "$runtime" ]; then
+    echo "ERROR: Invalid device definition in $device_json" >&2
+    return 1
+  fi
+
+  # Check if runtime is available
+  runtime_choice="$(resolve_runtime_strict "$runtime" 2>/dev/null || true)"
+  if [ -z "$runtime_choice" ]; then
+    echo "  ⚠ Runtime iOS $runtime not available, skipping $name"
+    return 0
+  fi
+
+  runtime_id="$(printf '%s' "$runtime_choice" | cut -d'|' -f1)"
+  runtime_name="$(printf '%s' "$runtime_choice" | cut -d'|' -f2)"
+
+  # Check if device type exists
+  device_type="$(devicetype_id_for_name "$name" || true)"
+  if [ -z "$device_type" ]; then
+    echo "  ⚠ Device type '$name' not available, skipping"
+    return 0
+  fi
+
+  # Build full device name with runtime
+  full_name="${name} (${runtime_name})"
+
+  # Check if device exists
+  existing_udid="$(existing_device_udid_any_runtime "$full_name" || true)"
+
+  if [ -z "$existing_udid" ]; then
+    # Device doesn't exist - create it
+    echo "  ➕ Creating device: $full_name"
+    xcrun simctl create "$full_name" "$device_type" "$runtime_id" >/dev/null 2>&1
+    return 2
+  fi
+
+  # Device exists - check if it has the correct runtime
+  current_runtime="$(ios_get_device_runtime "$full_name" || true)"
+
+  if [ "$current_runtime" = "$runtime" ]; then
+    echo "  ✓ Matched: $full_name"
+    return 0
+  fi
+
+  # Runtime mismatch - recreate device
+  echo "  🔄 Recreating device: $full_name (iOS $current_runtime → $runtime)"
+  xcrun simctl delete "$existing_udid" >/dev/null 2>&1 || true
+  xcrun simctl create "$full_name" "$device_type" "$runtime_id" >/dev/null 2>&1
+  return 1
 }
 
 # ============================================================================

@@ -6,9 +6,17 @@
     "path:../android/plugin.json",
     "path:../ios/plugin.json"
   ],
+  "packages": {
+    "nodejs": "20",
+    "watchman": "latest",
+    "process-compose": "latest"
+  },
   "env": {
     "REACT_NATIVE_CONFIG_DIR": "{{ .DevboxDir }}",
     "REACT_NATIVE_SCRIPTS_DIR": "{{ .Virtenv }}/scripts",
+    "REACT_NATIVE_WEB_BUILD_PATH": "web/build",
+    "ANDROID_DEVICES": "",
+    "IOS_DEVICES": "",
     "ANDROID_COMPILE_SDK": "35",
     "ANDROID_TARGET_SDK": "35",
     "ANDROID_BUILD_TOOLS_VERSION": "35.0.0",
@@ -18,14 +26,13 @@
     "ANDROID_CMAKE_VERSION": "4.1.2"
   },
   "create_files": {
-    "{{ .Virtenv }}/scripts/lib.sh": "scripts/lib.sh",
-    "{{ .Virtenv }}/scripts/env.sh": "scripts/env.sh",
     "{{ .Virtenv }}/process-compose.yaml": "config/process-compose.yaml",
-    "{{ .DevboxDir }}/react-native.json": "config/react-native.json"
+    "{{ .Virtenv }}/test-suite-android.yaml": "config/test-suite-android.yaml",
+    "{{ .Virtenv }}/test-suite-ios.yaml": "config/test-suite-ios.yaml",
+    "{{ .Virtenv }}/test-suite-all.yaml": "config/test-suite-all.yaml"
   },
   "shell": {
     "init_hook": [
-      ". {{ .Virtenv }}/scripts/env.sh"
     ],
     "scripts": {
       "build:node": [
@@ -63,6 +70,15 @@
         "devbox services start ios-simulator || devbox services up -b ios-simulator",
         "cd ios && env -u LD -u LDFLAGS -u NIX_LDFLAGS -u NIX_CFLAGS_COMPILE -u NIX_CFLAGS_LINK xcodebuild -project ${IOS_APP_PROJECT:-*.xcodeproj} -scheme ${IOS_APP_SCHEME:-$(basename ${IOS_APP_PROJECT:-*.xcodeproj} .xcodeproj)} -configuration Debug -destination 'platform=iOS Simulator,name=${IOS_SIM_NAME:-iPhone 15}' -derivedDataPath ../.devbox/virtenv/ios/DerivedData test"
       ],
+      "test:e2e:android": [
+        "process-compose -f {{ .Virtenv }}/test-suite-android.yaml --no-server --tui=${TEST_TUI:-true}"
+      ],
+      "test:e2e:ios": [
+        "process-compose -f {{ .Virtenv }}/test-suite-ios.yaml --no-server --tui=${TEST_TUI:-true}"
+      ],
+      "test:e2e:all": [
+        "process-compose -f {{ .Virtenv }}/test-suite-all.yaml --no-server --tui=${TEST_TUI:-true}"
+      ],
       "start:android": [
         "devbox services start rn-metro || devbox services up -b rn-metro",
         "npx react-native run-android --no-packager"
@@ -71,7 +87,35 @@
         "devbox services start rn-metro || devbox services up -b rn-metro",
         "npx react-native run-ios --no-packager"
       ],
-      "start:web": "devbox services start rn-metro || devbox services up rn-metro"
+      "start:web": "devbox services start rn-metro || devbox services up rn-metro",
+      "doctor": [
+        "echo 'React Native Environment Check'",
+        "echo '=============================='",
+        "echo ''",
+        "command -v node >/dev/null 2>&1 && echo '✓ Node.js is available' || echo '✗ Node.js not found'",
+        "command -v npm >/dev/null 2>&1 && echo '✓ npm is available' || echo '✗ npm not found'",
+        "command -v watchman >/dev/null 2>&1 && echo '✓ Watchman is available' || echo '⚠ Watchman not found (recommended for React Native)'",
+        "echo ''",
+        "echo '--- Android ---'",
+        "test -n \"${ANDROID_SDK_ROOT}\" && echo '✓ ANDROID_SDK_ROOT is set' || echo '✗ ANDROID_SDK_ROOT is not set'",
+        "test -d \"${ANDROID_SDK_ROOT}\" && echo '✓ ANDROID_SDK_ROOT directory exists' || echo '✗ ANDROID_SDK_ROOT directory does not exist'",
+        "command -v adb >/dev/null 2>&1 && echo '✓ adb is in PATH' || echo '✗ adb is not in PATH'",
+        "command -v emulator >/dev/null 2>&1 && echo '✓ emulator is in PATH' || echo '✗ emulator is not in PATH'",
+        "ls -1 ${ANDROID_DEVICES_DIR}/*.json 2>/dev/null | wc -l | xargs echo '  Device count:'",
+        "echo ''",
+        "echo '--- iOS ---'",
+        "xcrun --show-sdk-path >/dev/null 2>&1 && echo '✓ Xcode command line tools available' || echo '✗ Xcode command line tools not found'",
+        "command -v xcrun >/dev/null 2>&1 && echo '✓ xcrun is in PATH' || echo '✗ xcrun is not in PATH'",
+        "xcrun simctl list devices >/dev/null 2>&1 && echo '✓ xcrun simctl working' || echo '✗ xcrun simctl not working'",
+        "ls -1 ${IOS_DEVICES_DIR}/*.json 2>/dev/null | wc -l | xargs echo '  Device count:'"
+      ],
+      "verify:setup": [
+        "echo 'Verifying React Native setup...'",
+        "command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1 || (echo '✗ Node.js/npm check failed' && exit 1)",
+        "test -n \"${ANDROID_SDK_ROOT}\" && test -d \"${ANDROID_SDK_ROOT}\" && command -v adb >/dev/null 2>&1 || (echo '✗ Android environment check failed' && exit 1)",
+        "xcrun --show-sdk-path >/dev/null 2>&1 && xcrun simctl list devices >/dev/null 2>&1 || (echo '✗ iOS environment check failed' && exit 1)",
+        "echo '✓ React Native environment OK'"
+      ]
     }
   }
 }

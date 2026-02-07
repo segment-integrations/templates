@@ -45,26 +45,3 @@ ios_validate_xcode() {
   return 0
 }
 
-ios_validate_lock_file() {
-  lock_path="${IOS_DEVICES_DIR}/devices.lock"
-  devices_dir="${IOS_DEVICES_DIR}"
-
-  # Lock file is optional for iOS
-  if [ ! -f "$lock_path" ]; then
-    return 0
-  fi
-
-  # Compute checksum of device files using lib.sh function
-  current_checksum=$(ios_compute_devices_checksum "$devices_dir" 2>/dev/null || echo "")
-  if [ -z "$current_checksum" ]; then
-    # No checksum tool available, skip validation
-    return 0
-  fi
-
-  # Read checksum from lock file
-  lock_checksum=$(jq -r '.checksum // ""' "$lock_path" 2>/dev/null || echo "")
-
-  if [ "$current_checksum" != "$lock_checksum" ]; then
-    echo "Warning: devices.lock may be stale. Run 'devbox run ios.sh devices eval' to update." >&2
-  fi
-}

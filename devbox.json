@@ -17,7 +17,7 @@
         "shellcheck -S warning plugins/ios/scripts/*.sh"
       ],
       "lint:rn": [
-        "shellcheck -S warning plugins/react-native/scripts/*.sh"
+        "bash -c 'if ls plugins/react-native/scripts/*.sh 1>/dev/null 2>&1; then shellcheck -S warning plugins/react-native/scripts/*.sh; else echo \"No React Native shell scripts to lint\"; fi'"
       ],
       "test:android:lib": [
         "bash plugins/tests/android/test-lib.sh"
@@ -44,14 +44,14 @@
       "test:ios:device-mgmt": [
         "bash plugins/tests/ios/test-device-mgmt.sh"
       ],
-      "test:ios:cache": [
+      "test:ios:validation": [
         "bash plugins/tests/ios/test-cache.sh"
       ],
       "test:ios": [
         "devbox run lint:ios",
         "devbox run test:ios:lib",
         "devbox run test:ios:device-mgmt",
-        "devbox run test:ios:cache"
+        "devbox run test:ios:validation"
       ],
       "test:rn": [
         "devbox run lint:rn"
@@ -80,6 +80,9 @@
         "bash tests/e2e-all.sh"
       ],
       "test": [
+        "echo 'Cleaning previous test results...'",
+        "rm -rf test-results/",
+        "mkdir -p test-results/",
         "echo '========================================'",
         "echo 'Running ALL tests (lint, unit, workflows, e2e)'",
         "echo '========================================'",
@@ -98,24 +101,26 @@
         "echo '1/3 Android...'",
         "(cd examples/android && rm -rf .devbox devbox.d devbox.lock && devbox install)",
         "echo '    Generating device lock file...'",
-        "(cd examples/android && devbox run android.sh devices eval > /dev/null)",
+        "(cd examples/android && ANDROID_DEVICES_EVAL=1 devbox run android:devices:eval > /dev/null)",
         "echo '  ✓ Android synced'",
         "echo ''",
         "echo '2/3 iOS...'",
         "(cd examples/ios && rm -rf .devbox devbox.d devbox.lock && devbox install)",
         "echo '    Generating device lock file...'",
-        "(cd examples/ios && devbox run ios.sh devices eval > /dev/null)",
+        "(cd examples/ios && IOS_DEVICES_EVAL=1 devbox run ios:devices:eval > /dev/null)",
         "echo '  ✓ iOS synced'",
         "echo ''",
         "echo '3/3 React Native...'",
         "(cd examples/react-native && rm -rf .devbox devbox.d devbox.lock && devbox install)",
         "echo '    Generating Android lock file...'",
-        "(cd examples/react-native && devbox run android.sh devices eval > /dev/null)",
+        "(cd examples/react-native && ANDROID_DEVICES_EVAL=1 devbox run android:devices:eval > /dev/null)",
         "echo '    Generating iOS lock file...'",
-        "(cd examples/react-native && devbox run ios.sh devices eval > /dev/null)",
+        "(cd examples/react-native && IOS_DEVICES_EVAL=1 devbox run ios:devices:eval > /dev/null)",
         "echo '  ✓ React Native synced'",
         "echo ''",
-        "echo '✓ All examples synced successfully!'"
+        "echo '✓ All examples synced successfully!'",
+        "echo ''",
+        "echo 'Note: AVDs and simulators will be created automatically on first emulator/simulator start.'"
       ]
     }
   }

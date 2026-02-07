@@ -5,7 +5,7 @@ echo "iOS Device Management Tests"
 echo "============================"
 echo ""
 
-cd "$(dirname "$0")/../../examples/ios" 2>/dev/null || {
+cd "$(dirname "$0")/../../../examples/ios" 2>/dev/null || {
   echo "Error: iOS example directory not found"
   exit 1
 }
@@ -18,52 +18,32 @@ echo "Test: Device listing..."
 assert_command_success "Device list command succeeds" \
   bash -c "devbox run --pure ios.sh devices list"
 
-# Test 2: Device selection and lock file generation
-echo "Test: Device selection..."
-if devbox run --pure ios.sh devices select min >/dev/null 2>&1; then
-  assert_file_exists "devbox.d/ios/devices/devices.lock" "Lock file created after select"
+# Test 2: Lock file evaluation (new approach - generates from IOS_DEVICES env var)
+echo "Test: Lock file evaluation..."
+if devbox run --pure ios.sh devices eval >/dev/null 2>&1; then
+  assert_file_exists "devbox.d/ios/devices/devices.lock" "Lock file created after eval"
 else
-  echo "✗ Device select command failed"
-  ((TEST_FAIL++))
+  echo "✗ Device eval command failed"
+  TEST_FAIL=$((TEST_FAIL + 1))
 fi
 
-# Test 3: Lock file structure
+# Test 3: Lock file structure (new format is plain text with checksums)
 echo "Test: Lock file structure..."
 if [ -f "devbox.d/ios/devices/devices.lock" ]; then
-  devices=$(jq -r '.devices | length' devbox.d/ios/devices/devices.lock 2>/dev/null || echo "0")
-  if [ "$devices" -ge 0 ]; then
-    ((TEST_PASS++))
-    echo "✓ Lock file contains devices array"
+  # Lock file should contain device names and checksums
+  if grep -q ":" "devbox.d/ios/devices/devices.lock" 2>/dev/null; then
+    TEST_PASS=$((TEST_PASS + 1))
+    echo "✓ Lock file contains device checksums"
   else
-    ((TEST_FAIL++))
-    echo "✗ Lock file missing devices array"
-  fi
-
-  # Test 4: Checksum exists
-  checksum=$(jq -r '.checksum // ""' devbox.d/ios/devices/devices.lock 2>/dev/null || echo "")
-  if [ -n "$checksum" ]; then
-    ((TEST_PASS++))
-    echo "✓ Lock file contains checksum"
-  else
-    ((TEST_FAIL++))
-    echo "✗ Lock file missing checksum"
-  fi
-
-  # Test 5: Timestamp exists
-  timestamp=$(jq -r '.generated_at // ""' devbox.d/ios/devices/devices.lock 2>/dev/null || echo "")
-  if [ -n "$timestamp" ]; then
-    ((TEST_PASS++))
-    echo "✓ Lock file contains timestamp"
-  else
-    ((TEST_FAIL++))
-    echo "✗ Lock file missing timestamp"
+    TEST_FAIL=$((TEST_FAIL + 1))
+    echo "✗ Lock file has invalid format"
   fi
 else
-  ((TEST_FAIL+=3))
+  TEST_FAIL=$((TEST_FAIL + 1))
   echo "✗ Lock file not found"
 fi
 
-# Test 6: Config commands
+# Test 4: Config commands
 echo "Test: Config show command..."
 assert_command_success "Config show succeeds" \
   bash -c "devbox run --pure ios.sh config show"

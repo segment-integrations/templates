@@ -5,6 +5,7 @@
   "env": {
     "IOS_CONFIG_DIR": "{{ .DevboxDir }}",
     "IOS_DEVICES_DIR": "{{ .DevboxDir }}/devices",
+    "IOS_DEVICES": "",
     "IOS_SCRIPTS_DIR": "{{ .Virtenv }}/scripts",
     "IOS_DEFAULT_DEVICE": "max",
     "IOS_DEFAULT_RUNTIME": "",
@@ -24,6 +25,7 @@
     "gnugrep": "latest",
     "gawk": "latest",
     "jq": "latest",
+    "process-compose": "latest",
     "cocoapods": {
       "version": "latest",
       "platforms": ["x86_64-darwin", "aarch64-darwin"]
@@ -31,6 +33,7 @@
   },
   "create_files": {
     "{{ .Virtenv }}/process-compose.yaml": "config/process-compose.yaml",
+    "{{ .Virtenv }}/test-suite.yaml": "config/test-suite.yaml",
     "{{ .Virtenv }}/scripts/lib.sh": "scripts/lib.sh",
     "{{ .Virtenv }}/scripts/env.sh": "scripts/env.sh",
     "{{ .Virtenv }}/scripts/validate.sh": "scripts/validate.sh",
@@ -50,6 +53,9 @@
       ". {{ .Virtenv }}/scripts/env.sh"
     ],
     "scripts": {
+      "ios:devices:eval": [
+        "ios.sh devices eval"
+      ],
       "build:ios": [
         "env -u LD -u LDFLAGS -u NIX_LDFLAGS -u NIX_CFLAGS_COMPILE -u NIX_CFLAGS_LINK xcodebuild -project ${IOS_APP_PROJECT:-*.xcodeproj} -scheme ${IOS_APP_SCHEME:-$(basename ${IOS_APP_PROJECT:-*.xcodeproj} .xcodeproj)} -configuration Debug -destination 'generic/platform=iOS Simulator' -derivedDataPath ${IOS_APP_DERIVED_DATA:-.devbox/virtenv/ios/DerivedData} build"
       ],
@@ -58,22 +64,42 @@
       ],
       "test:ios:e2e": [
         "echo 'Starting iOS E2E tests...'",
-        ". {{ .Virtenv }}/scripts/simulator.sh",
         "ios_start \"${1:-}\"",
         "env -u LD -u LDFLAGS -u NIX_LDFLAGS -u NIX_CFLAGS_COMPILE -u NIX_CFLAGS_LINK xcodebuild -project ${IOS_APP_PROJECT:-*.xcodeproj} -scheme ${IOS_APP_SCHEME:-$(basename ${IOS_APP_PROJECT:-*.xcodeproj} .xcodeproj)} -configuration Debug -destination 'platform=iOS Simulator,name=${IOS_SIM_NAME:-iPhone 15}' -derivedDataPath ${IOS_APP_DERIVED_DATA:-.devbox/virtenv/ios/DerivedData} test",
         "ios_stop"
       ],
+      "test:e2e": [
+        "process-compose -f {{ .Virtenv }}/test-suite.yaml --no-server --tui=${TEST_TUI:-true}"
+      ],
       "start:sim": [
-        ". {{ .Virtenv }}/scripts/simulator.sh",
         "ios_start \"${1:-}\""
       ],
       "stop:sim": [
-        ". {{ .Virtenv }}/scripts/simulator.sh",
         "ios_stop"
       ],
       "start:ios": [
-        ". {{ .Virtenv }}/scripts/deploy.sh",
         "ios_run_app \"${1-}\""
+      ],
+      "doctor": [
+        "echo 'iOS Environment Check'",
+        "echo '===================='",
+        "echo ''",
+        "echo 'IOS_DEVELOPER_DIR:' ${IOS_DEVELOPER_DIR:-'NOT SET (using xcode-select)'}",
+        "xcrun --show-sdk-path >/dev/null 2>&1 && echo '✓ Xcode command line tools available' || echo '✗ Xcode command line tools not found'",
+        "echo ''",
+        "command -v xcrun >/dev/null 2>&1 && echo '✓ xcrun is in PATH' || echo '✗ xcrun is not in PATH'",
+        "command -v simctl >/dev/null 2>&1 && echo '✓ simctl is available' || echo '⚠ simctl not in PATH (use xcrun simctl)'",
+        "xcrun simctl list devices >/dev/null 2>&1 && echo '✓ xcrun simctl working' || echo '✗ xcrun simctl not working'",
+        "echo ''",
+        "echo 'Device Definitions:'",
+        "ls -1 ${IOS_DEVICES_DIR}/*.json 2>/dev/null | wc -l | xargs echo '  Count:'",
+        "echo '  IOS_DEVICES:' ${IOS_DEVICES:-'(all devices)'}",
+        "echo ''",
+        "test -f ${IOS_DEVICES_DIR}/devices.lock && echo '✓ Lock file exists' || echo '⚠ Lock file not generated yet (run devbox shell)'",
+        "echo ''"
+      ],
+      "verify:setup": [
+        "xcrun --show-sdk-path >/dev/null 2>&1 && xcrun simctl list devices >/dev/null 2>&1 && echo '✓ iOS environment OK' || (echo '✗ iOS environment check failed. Run: devbox run doctor' && exit 1)"
       ]
     }
   }

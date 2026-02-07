@@ -54,6 +54,7 @@ jobs:
           BOOT_TIMEOUT: 240
           TEST_TIMEOUT: 600
           ANDROID_DEFAULT_DEVICE: ${{ matrix.device }}
+          TEST_TUI: false
         run: bash ../../tests/e2e-android-orchestrated.sh
 
       - name: Upload logs
@@ -62,7 +63,7 @@ jobs:
         with:
           name: android-${{ matrix.device }}-logs
           path: |
-            /tmp/android-e2e-logs/
+            test-results/android-repo-e2e-logs/
             examples/android/app/build/outputs/
             examples/android/build/
           retention-days: 7
@@ -98,6 +99,7 @@ jobs:
           BOOT_TIMEOUT: 180
           TEST_TIMEOUT: 600
           IOS_DEFAULT_DEVICE: ${{ matrix.device }}
+          TEST_TUI: false
         run: bash ../../tests/e2e-ios-orchestrated.sh
 
       - name: Upload logs
@@ -106,7 +108,7 @@ jobs:
         with:
           name: ios-${{ matrix.device }}-logs
           path: |
-            /tmp/ios-e2e-logs/
+            test-results/ios-repo-e2e-logs/
             ~/Library/Logs/CoreSimulator/
           retention-days: 7
 
@@ -168,6 +170,7 @@ jobs:
           TEST_TIMEOUT: 900
           ANDROID_DEFAULT_DEVICE: ${{ matrix.device }}
           IOS_DEFAULT_DEVICE: ${{ matrix.device }}
+          TEST_TUI: false
         run: bash ../../tests/e2e-react-native-orchestrated.sh
 
       - name: Upload logs
@@ -176,7 +179,7 @@ jobs:
         with:
           name: react-native-${{ matrix.platform }}-${{ matrix.device }}-logs
           path: |
-            /tmp/rn-e2e-logs/
+            test-results/react-native-repo-e2e-logs/
             examples/react-native/android/app/build/outputs/
             examples/react-native/ios/build/
             ~/Library/Logs/CoreSimulator/

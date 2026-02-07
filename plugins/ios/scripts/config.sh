@@ -32,18 +32,29 @@ ios_debug_log "config.sh loaded"
 
 # Show current configuration
 ios_config_show() {
-  config_path="$(ios_config_path 2>/dev/null || true)"
-  if [ -z "$config_path" ] || [ ! -f "$config_path" ]; then
-    echo "ERROR: Generated configuration not found: $config_path" >&2
-    echo "       Run 'devbox shell' to initialize the environment" >&2
-    return 1
-  fi
-  echo "Current iOS configuration (generated from environment variables):"
+  echo "Current iOS configuration (from environment variables):"
   echo ""
-  cat "$config_path"
+  echo "Device Selection:"
+  echo "  IOS_DEVICES: ${IOS_DEVICES:-(all devices)}"
+  echo ""
+  echo "Default Device:"
+  echo "  IOS_DEFAULT_DEVICE: ${IOS_DEFAULT_DEVICE:-max}"
+  echo "  IOS_DEFAULT_RUNTIME: ${IOS_DEFAULT_RUNTIME:-(auto)}"
+  echo ""
+  echo "Application:"
+  echo "  IOS_APP_PROJECT: ${IOS_APP_PROJECT:-*.xcodeproj}"
+  echo "  IOS_APP_SCHEME: ${IOS_APP_SCHEME:-(auto)}"
+  echo "  IOS_APP_BUNDLE_ID: ${IOS_APP_BUNDLE_ID:-com.example.ios}"
+  echo "  IOS_APP_ARTIFACT: ${IOS_APP_ARTIFACT:-.devbox/virtenv/ios/DerivedData/...}"
+  echo ""
+  echo "Paths:"
+  echo "  IOS_CONFIG_DIR: ${IOS_CONFIG_DIR:-.}"
+  echo "  IOS_DEVICES_DIR: ${IOS_DEVICES_DIR:-./devbox.d/ios/devices}"
+  echo "  IOS_DEVELOPER_DIR: ${IOS_DEVELOPER_DIR:-(auto)}"
   echo ""
   echo "To override values, set environment variables in your devbox.json:"
   echo '  "env": {'
+  echo '    "IOS_DEVICES": "min,max",'
   echo '    "IOS_DEFAULT_DEVICE": "min",'
   echo '    "IOS_APP_PROJECT": "MyApp.xcodeproj"'
   echo '  }'

@@ -249,6 +249,86 @@ android_avd_exists() {
   android_run_avdmanager list avd | grep -q "Name: ${avd_name}"
 }
 
+# ============================================================================
+# AVD Configuration Readers
+# ============================================================================
+
+# Get AVD configuration file path
+android_get_avd_config_path() {
+  avd_name="$1"
+  avd_home="${ANDROID_AVD_HOME:-$HOME/.android/avd}"
+
+  printf '%s\n' "${avd_home}/${avd_name}.avd/config.ini"
+}
+
+# Read API level from AVD config.ini
+# Returns: API level (e.g., "31") or empty if not found
+android_get_avd_api() {
+  avd_name="$1"
+  config_path="$(android_get_avd_config_path "$avd_name")"
+
+  if [ ! -f "$config_path" ]; then
+    return 1
+  fi
+
+  # Parse image.sysdir.1=system-images/android-31/google_apis/x86_64/
+  # Extract the API level (31 in this example)
+  api="$(grep '^image\.sysdir\.1=' "$config_path" | sed 's/.*android-\([0-9]*\).*/\1/')"
+
+  if [ -n "$api" ]; then
+    printf '%s\n' "$api"
+    return 0
+  fi
+
+  return 1
+}
+
+# Read tag from AVD config.ini
+# Returns: tag (e.g., "google_apis", "default") or empty if not found
+android_get_avd_tag() {
+  avd_name="$1"
+  config_path="$(android_get_avd_config_path "$avd_name")"
+
+  if [ ! -f "$config_path" ]; then
+    return 1
+  fi
+
+  # Read tag.id from config
+  tag="$(grep '^tag\.id=' "$config_path" | cut -d'=' -f2 | tr -d ' \r\n')"
+
+  if [ -n "$tag" ]; then
+    printf '%s\n' "$tag"
+    return 0
+  fi
+
+  return 1
+}
+
+# Read ABI from AVD config.ini
+# Returns: ABI (e.g., "x86_64", "arm64-v8a") or empty if not found
+android_get_avd_abi() {
+  avd_name="$1"
+  config_path="$(android_get_avd_config_path "$avd_name")"
+
+  if [ ! -f "$config_path" ]; then
+    return 1
+  fi
+
+  # Read abi.type from config
+  abi="$(grep '^abi\.type=' "$config_path" | cut -d'=' -f2 | tr -d ' \r\n')"
+
+  if [ -n "$abi" ]; then
+    printf '%s\n' "$abi"
+    return 0
+  fi
+
+  return 1
+}
+
+# ============================================================================
+# AVD Creation and Deletion
+# ============================================================================
+
 # Create an Android Virtual Device (AVD)
 android_create_avd() {
   avd_name="$1"
@@ -604,6 +684,75 @@ android_delete_avd() {
   echo "Deleting AVD: $avd_name"
   android_run_avdmanager delete avd --name "$avd_name"
   echo "  ✓ AVD deleted: $avd_name"
+}
+
+# ============================================================================
+# AVD Sync - Ensure AVD matches device definition
+# ============================================================================
+
+# Ensure AVD matches device definition, recreating if necessary
+# Args: device_json_path
+# Returns: 0=matched, 1=recreated, 2=created
+android_ensure_avd_from_definition() {
+  device_json="$1"
+
+  if [ ! -f "$device_json" ]; then
+    echo "ERROR: Device definition not found: $device_json" >&2
+    return 1
+  fi
+
+  # Parse device definition
+  name="$(jq -r '.name // empty' "$device_json")"
+  api="$(jq -r '.api // empty' "$device_json")"
+  device="$(jq -r '.device // empty' "$device_json")"
+  tag="$(jq -r '.tag // empty' "$device_json")"
+  preferred_abi="$(jq -r '.preferred_abi // empty' "$device_json")"
+
+  if [ -z "$name" ] || [ -z "$api" ] || [ -z "$device" ] || [ -z "$tag" ]; then
+    echo "ERROR: Invalid device definition in $device_json" >&2
+    return 1
+  fi
+
+  # Resolve device hardware
+  device_hardware="$(android_resolve_device_hardware "$device" || true)"
+  if [ -z "$device_hardware" ]; then
+    echo "  ⚠ Device hardware '$device' not available, skipping $name"
+    return 0
+  fi
+
+  # Pick system image
+  system_image="$(android_pick_system_image "$api" "$tag" "$preferred_abi" || true)"
+  if [ -z "$system_image" ]; then
+    echo "  ⚠ System image not available (API $api, tag $tag), skipping $name"
+    return 0
+  fi
+
+  # Extract expected ABI from system image package
+  expected_abi="${system_image##*;}"
+
+  # Check if AVD exists
+  if ! android_avd_exists "$name"; then
+    # Create new AVD
+    echo "  ➕ Creating AVD: $name (API $api, $tag, $expected_abi)"
+    android_create_avd "$name" "$device_hardware" "$system_image" >/dev/null 2>&1
+    return 2
+  fi
+
+  # AVD exists - check if it matches the definition
+  current_api="$(android_get_avd_api "$name" || true)"
+  current_tag="$(android_get_avd_tag "$name" || true)"
+  current_abi="$(android_get_avd_abi "$name" || true)"
+
+  if [ "$current_api" = "$api" ] && [ "$current_tag" = "$tag" ] && [ "$current_abi" = "$expected_abi" ]; then
+    echo "  ✓ Matched: $name (API $api, $tag, $expected_abi)"
+    return 0
+  fi
+
+  # Mismatch - recreate AVD
+  echo "  🔄 Recreating AVD: $name (API $current_api→$api, $current_tag→$tag, $current_abi→$expected_abi)"
+  android_delete_avd "$name" >/dev/null 2>&1
+  android_create_avd "$name" "$device_hardware" "$system_image" >/dev/null 2>&1
+  return 1
 }
 
 # Reset Android plugin state (AVDs, configs, adb keys)

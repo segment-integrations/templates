@@ -152,8 +152,14 @@ android_start_emulator() {
   emulator_flags="$emulator_flags -no-boot-anim"
   emulator_flags="$emulator_flags -camera-back none"
   emulator_flags="$emulator_flags -accel on"
-  emulator_flags="$emulator_flags -writable-system"
-  emulator_flags="$emulator_flags -no-snapshot-save"
+
+  # Snapshot configuration - default to enabled for fast boots (5-10s vs 2-5min)
+  # Set ANDROID_DISABLE_SNAPSHOTS=1 to force cold boots (needed for writable-system)
+  disable_snapshots="${ANDROID_DISABLE_SNAPSHOTS:-0}"
+  if [ "$disable_snapshots" = "1" ]; then
+    emulator_flags="$emulator_flags -writable-system"
+    emulator_flags="$emulator_flags -no-snapshot-save"
+  fi
 
   if [ -n "$headless_mode" ]; then
     emulator_flags="$emulator_flags -no-window"

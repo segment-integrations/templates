@@ -17,17 +17,26 @@ Usage: devices.sh <command> [args]
        DEVICES_CMD="list" devices.sh
 
 Commands:
-  list
-  show <name>
-  create <name> --runtime <version>
-  update <name> [--name <new>] [--runtime <version>]
-  delete <name>
-  select <name...>
-  reset
-  eval
+  list                                     List all device definitions
+  show <name>                              Show specific device JSON
+  create <name> --runtime <version>        Create new device definition
+  update <name> [--name <new>] [--runtime <version>]  Update existing device
+  delete <name>                            Remove device definition
+  eval                                     Generate devices.lock from IOS_DEVICES
+  sync                                     Ensure simulators match device definitions
+
+Device Selection:
+  Set IOS_DEVICES env var in devbox.json (comma-separated, empty = all):
+    {"IOS_DEVICES": "min,max"}
 
 Runtime values: run `xcrun simctl list runtimes` and use the iOS version (e.g. 17.5).
 Device names: run `xcrun simctl list devicetypes` and use the exact name.
+
+Examples:
+  devices.sh list
+  devices.sh create iphone15 --runtime 17.5
+  devices.sh eval
+  devices.sh sync
 USAGE
   exit 1
 }
@@ -43,7 +52,6 @@ fi
 shift || true
 
 # Use lib.sh functions for path resolution
-config_path="$(ios_config_path 2>/dev/null || echo "./devbox.d/ios/ios.json")"
 devices_dir="$(ios_devices_dir 2>/dev/null || echo "./devbox.d/ios/devices")"
 
 # Ensure jq is available
@@ -244,6 +252,87 @@ case "$command_name" in
 
     echo "Lock file generated: ${device_count} devices"
     ;;
+
+  # --------------------------------------------------------------------------
+  # Sync: Ensure simulators match device definitions
+  # --------------------------------------------------------------------------
+  sync)
+    # Source device.sh for device management functions
+    if [ ! -f "$script_dir/device.sh" ]; then
+      echo "ERROR: device.sh not found in ${script_dir}" >&2
+      exit 1
+    fi
+    . "$script_dir/device.sh"
+
+    # Check if devices.lock exists
+    lock_path="${devices_dir%/}/devices.lock"
+    if [ ! -f "$lock_path" ]; then
+      echo "ERROR: devices.lock not found at $lock_path" >&2
+      echo "       Run 'devices.sh eval' first or ensure IOS_DEVICES is set" >&2
+      exit 1
+    fi
+
+    # Validate lock file format
+    if ! jq -e '.devices' "$lock_path" >/dev/null 2>&1; then
+      echo "ERROR: Invalid devices.lock format" >&2
+      exit 1
+    fi
+
+    # Get device count
+    device_count="$(jq '.devices | length' "$lock_path")"
+    if [ "$device_count" -eq 0 ]; then
+      echo "No devices defined in lock file"
+      exit 0
+    fi
+
+    echo "Syncing simulators with device definitions..."
+    echo "================================================"
+
+    # Counters for summary
+    matched=0
+    recreated=0
+    created=0
+    skipped=0
+
+    # Create temp files for each device definition
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf "$temp_dir"' EXIT
+
+    # Extract each device from lock file and sync
+    device_index=0
+    while [ "$device_index" -lt "$device_count" ]; do
+      device_json="$temp_dir/device_${device_index}.json"
+      jq -c ".devices[$device_index]" "$lock_path" > "$device_json"
+
+      # Call ensure function and track result
+      if ios_ensure_device_from_definition "$device_json"; then
+        result=$?
+        case $result in
+          0) matched=$((matched + 1)) ;;
+          1) recreated=$((recreated + 1)) ;;
+          2) created=$((created + 1)) ;;
+        esac
+      else
+        skipped=$((skipped + 1))
+      fi
+
+      device_index=$((device_index + 1))
+    done
+
+    echo "================================================"
+    echo "Sync complete:"
+    echo "  ✓ Matched:   $matched"
+    if [ "$recreated" -gt 0 ]; then
+      echo "  🔄 Recreated: $recreated"
+    fi
+    if [ "$created" -gt 0 ]; then
+      echo "  ➕ Created:   $created"
+    fi
+    if [ "$skipped" -gt 0 ]; then
+      echo "  ⚠ Skipped:   $skipped"
+    fi
+    ;;
+
   *)
     usage
     ;;

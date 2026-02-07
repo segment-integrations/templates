@@ -1,6 +1,6 @@
 version: "0.5"
 
-log_location: "/tmp/devbox-lint-logs"
+log_location: "test-results/devbox-lint-logs"
 log_level: info
 
 processes:
@@ -16,7 +16,7 @@ processes:
       restart: "no"
 
   lint-react-native-scripts:
-    command: "shellcheck -S warning plugins/react-native/scripts/*.sh"
+    command: "bash -c 'if ls plugins/react-native/scripts/*.sh 1>/dev/null 2>&1; then shellcheck -S warning plugins/react-native/scripts/*.sh; else echo \"No React Native shell scripts to lint\"; fi'"
     availability:
       restart: "no"
 

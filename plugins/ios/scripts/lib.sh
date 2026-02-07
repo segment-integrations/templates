@@ -18,7 +18,7 @@ IOS_LIB_LOADED_PID="$$"
 # Debug logging helper
 ios_debug_log() {
   if [ "${IOS_DEBUG:-}" = "1" ] || [ "${DEBUG:-}" = "1" ]; then
-    printf 'DEBUG: %s\n' "$*"
+    printf 'DEBUG: %s\n' "$*" >&2
   fi
 }
 

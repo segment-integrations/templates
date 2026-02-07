@@ -38,17 +38,17 @@ Three main plugins are located in `plugins/`:
 - Generated via `{platform}.sh devices eval`
 - Contains checksums of device definitions for validation
 
-**Caching**: 1-hour TTL caches for expensive operations
-- Android: `.nix_sdk_eval.cache` (Nix flake evaluation)
-- iOS: `.xcode_dev_dir.cache`, `.shellenv.cache`
-- Cache invalidation is time-based and event-based
+**Caching**: Nix handles flake evaluation caching internally
+- iOS: `.xcode_dev_dir.cache`, `.shellenv.cache` for expensive shell operations
+- No custom Android SDK caching needed - Nix manages this
 
 **Environment Scoping**: All plugins follow naming patterns:
 - `{PLATFORM}_CONFIG_DIR` - Configuration directory
 - `{PLATFORM}_DEVICES_DIR` - Device definitions
 - `{PLATFORM}_SCRIPTS_DIR` - Runtime scripts
 - `{PLATFORM}_DEFAULT_DEVICE` - Default device selection
-- `EVALUATE_DEVICES` - Devices to evaluate (empty = all)
+- `ANDROID_DEVICES` - Android devices to evaluate (comma-separated, empty = all)
+- `IOS_DEVICES` - iOS devices to evaluate (comma-separated, empty = all)
 
 ## Common Commands
 
@@ -74,13 +74,23 @@ devbox run --pure android.sh devices create pixel_api28 --api 28 --device pixel 
 devbox run --pure android.sh devices update pixel_api28 --api 29
 devbox run --pure android.sh devices delete pixel_api28
 
-# Select devices for evaluation (reduces CI build time)
-devbox run --pure android.sh devices select max
-devbox run --pure android.sh devices eval  # Regenerate lock file
+# Regenerate lock file (after creating/updating/deleting devices)
+devbox run --pure android.sh devices eval
+
+# Sync AVDs to match device definitions
+devbox run --pure android.sh devices sync
 
 # View configuration
 devbox run --pure android.sh config show
-devbox run --pure android.sh config set ANDROID_DEFAULT_DEVICE=max
+
+# Override configuration (set in devbox.json)
+# {
+#   "include": ["plugin:android"],
+#   "env": {
+#     "ANDROID_DEFAULT_DEVICE": "max",
+#     "ANDROID_DEVICES": "min,max"
+#   }
+# }
 ```
 
 #### iOS
@@ -93,12 +103,23 @@ devbox run --pure ios.sh devices create iphone15 --runtime 17.5
 devbox run --pure ios.sh devices update iphone15 --runtime 18.0
 devbox run --pure ios.sh devices delete iphone15
 
-# Select devices for evaluation
-devbox run --pure ios.sh devices select min max
-devbox run --pure ios.sh devices eval  # Regenerate lock file
+# Regenerate lock file (after creating/updating/deleting devices)
+devbox run --pure ios.sh devices eval
+
+# Sync simulators to match device definitions
+devbox run --pure ios.sh devices sync
 
 # View configuration
 devbox run --pure ios.sh config show
+
+# Override configuration (set in devbox.json)
+# {
+#   "include": ["plugin:ios"],
+#   "env": {
+#     "IOS_DEFAULT_DEVICE": "max",
+#     "IOS_DEVICES": "min,max"
+#   }
+# }
 ```
 
 ### Building and Running
@@ -272,11 +293,10 @@ DEBUG=1 devbox shell
 
 Check cache validity:
 ```bash
-# Android - view cached Nix evaluation
-cat devbox.d/android/.nix_sdk_eval.cache
-
 # iOS - view cached Xcode path
 cat .devbox/virtenv/ios/.xcode_dev_dir.cache
+
+# Android SDK - Nix handles caching internally (no cache file to check)
 ```
 
 Validate lock files:
@@ -284,6 +304,222 @@ Validate lock files:
 devbox run --pure android.sh devices eval
 devbox run --pure ios.sh devices eval
 ```
+
+## Contributing Guidelines
+
+### Code Philosophy
+
+**Simplicity and readability first.** Code should be easy to understand at a glance. Prefer straightforward solutions over clever ones. If you need to explain what code does, the code is probably too complex.
+
+**DRY and single responsibility.** Extract repeated logic into functions with clear names. Each function should do one thing well. Each file should have a focused purpose.
+
+**Keep files focused and manageable.** Don't let files grow with unrelated functions. Split large files by concern:
+- `lib.sh` - Generic utilities (path manipulation, JSON parsing, logging)
+- `devices.sh` - Device management operations
+- `avd.sh` - AVD-specific operations
+- `env.sh` - Environment variable setup
+
+When a file exceeds ~500 lines or contains unrelated functions, split it.
+
+**Minimal comments in code.** Write self-documenting code with clear function and variable names. Use comments only for:
+- Why decisions were made (not what the code does)
+- Complex algorithms that can't be simplified
+- Workarounds for external tool bugs
+
+Document public APIs exhaustively in REFERENCE.md files, not in code comments.
+
+**Fail loudly, avoid fallbacks.** When something is wrong, the code should exit with a clear error message and non-zero status. Avoid silent fallbacks that hide problems.
+
+**Reduce edge cases and unexpected behavior.** Design for the common path. When edge cases arise, validate assumptions early and fail fast rather than adding complex branching logic.
+
+**Scripts fail on error.** All shell scripts use `set -euo pipefail` (or `set -eu` for POSIX sh). Functions return 0 on success, non-zero on failure. Avoid `|| true` except in validation functions where warnings shouldn't block execution.
+
+**Validation warns but doesn't block.** User-facing validation commands (like lock file checksum mismatches) should warn with actionable fix commands but never prevent the user from continuing. The validation philosophy is "inform, don't obstruct."
+
+### Documentation Style
+
+Documentation is split into two types with different purposes:
+
+**1. Guides and Examples** - Help users accomplish tasks
+- Use prose style with short, digestible paragraphs (2-4 sentences)
+- Only use bullet points and numbered lists for step-by-step instructions
+- Focus on practical workflows and common use cases
+- Include runnable code examples
+- No marketing language or superlatives
+- Examples: CLAUDE.md, CONVENTIONS.md, workflow README files
+
+**2. Reference Documentation** - Exhaustive explanations of all options
+- Document every user-facing option, variable, method, and command
+- Organized by component (environment variables, CLI commands, config options)
+- Concise descriptions without fluff
+- Include valid values, defaults, and constraints
+- Examples: REFERENCE.md files for each plugin
+
+**General writing rules:**
+- Write concisely. Remove unnecessary words.
+- No marketing language. Avoid terms like "powerful," "seamless," "robust," "flexible."
+- Use active voice. "The script validates" not "Validation is performed."
+- One concept per paragraph.
+- Code examples should be runnable and realistic.
+
+### Naming Standards
+
+**Environment Variables:**
+```
+{PLATFORM}_{CATEGORY}_{DESCRIPTOR}
+
+Examples:
+- ANDROID_DEFAULT_DEVICE
+- ANDROID_SDK_ROOT
+- IOS_DEVELOPER_DIR
+- ANDROID_BUILD_TOOLS_VERSION
+```
+
+**Shell Scripts:**
+```
+{platform}.sh       - Main CLI entry point (android.sh, ios.sh)
+{feature}.sh        - Feature-specific scripts (devices.sh, avd.sh, env.sh)
+lib.sh              - Shared utility functions
+test-{feature}.sh   - Test scripts
+
+Examples:
+- android.sh
+- devices.sh
+- env.sh
+- lib.sh
+- test-devices.sh
+```
+
+**Shell Functions:**
+```
+{platform}_{category}_{action}
+
+Examples:
+- android_devices_list
+- android_devices_create
+- ios_get_developer_dir
+- android_validate_lock_file
+```
+
+**Device Files:**
+```
+{descriptor}.json   - Device definition files
+
+Examples:
+- min.json          - Minimum supported version
+- max.json          - Maximum/latest version
+- pixel_api30.json  - Descriptive device name
+```
+
+**Lock Files:**
+```
+devices.lock        - Generated lock file (plain text, device:checksum format)
+```
+
+**Cache Files:**
+```
+.{feature}.cache    - Hidden cache files with descriptive names
+
+Examples:
+- .xcode_dev_dir.cache
+- .shellenv.cache
+```
+
+### Directory Structure Standards
+
+**Plugin Directory Layout:**
+```
+plugins/{platform}/
+├── config/              # Template files copied to user projects
+│   ├── devices/         # Default device definitions
+│   └── *.yaml           # Process-compose test suites
+├── scripts/             # Runtime scripts
+│   ├── {platform}.sh    # Main CLI
+│   ├── lib.sh           # Shared utilities
+│   ├── env.sh           # Environment setup
+│   └── {feature}.sh     # Feature scripts
+├── plugin.json          # Plugin manifest
+└── REFERENCE.md         # Complete API reference
+```
+
+**Example Project Layout:**
+```
+examples/{platform}/
+├── devbox.d/
+│   └── {platform}/
+│       └── devices/     # User device definitions
+│           ├── *.json
+│           └── devices.lock
+├── devbox.json          # Includes plugin
+└── README.md            # Usage guide
+```
+
+**Test Directory Layout:**
+```
+plugins/tests/
+├── {platform}/
+│   ├── test-lib.sh           # Unit tests for lib.sh
+│   ├── test-devices.sh       # Unit tests for devices.sh
+│   ├── test-device-mgmt.sh   # Integration tests
+│   └── test-validation.sh    # Validation tests
+└── test-framework.sh         # Shared test utilities
+```
+
+### Process-Compose Standards
+
+**File naming:**
+```
+process-compose-{suite}.yaml
+
+Examples:
+- process-compose-lint.yaml
+- process-compose-unit-tests.yaml
+- process-compose-e2e.yaml
+```
+
+**Process naming:**
+```
+{category}-{feature}
+
+Examples:
+- lint-android
+- test-android-lib
+- e2e-android
+- summary
+```
+
+**Log locations:**
+```
+test-results/{suite-name}-logs
+
+Examples:
+- test-results/devbox-lint-logs
+- test-results/android-repo-e2e-logs
+```
+
+**Always include a summary process:**
+- Depends on all other processes with `process_completed` (not `process_completed_successfully`)
+- Displays test results in clean, scannable format
+- Lists log file locations for debugging
+
+### Git Commit Standards
+
+Commits should follow conventional commit format:
+
+```
+{type}({scope}): {description}
+
+Examples:
+- feat(android): add device sync command
+- fix(ios): resolve Xcode path caching issue
+- docs(contributing): add naming standards
+- test(android): add device management tests
+- refactor(react-native): simplify plugin composition
+```
+
+**Types:** feat, fix, docs, test, refactor, perf, chore
+
+**Scopes:** android, ios, react-native, ci, docs, tests
 
 ## CI/CD
 
@@ -323,13 +559,14 @@ Configuration for both Android and iOS plugins is now managed via environment va
 
 ### Android Plugin Environment Variables
 - `ANDROID_DEFAULT_DEVICE` - Default emulator
+- `ANDROID_DEVICES` - Devices to evaluate (comma-separated, empty = all)
 - `ANDROID_APP_APK` - APK path/glob for installation
 - `ANDROID_BUILD_TOOLS_VERSION` - Build tools version
 - `ANDROID_LOCAL_SDK` - Use local SDK instead of Nix (0/1)
-- `EVALUATE_DEVICES` - Devices to evaluate in flake
 
 ### iOS Plugin Environment Variables
 - `IOS_DEFAULT_DEVICE` - Default simulator
+- `IOS_DEVICES` - Devices to evaluate (comma-separated, empty = all)
 - `IOS_APP_PROJECT` - Xcode project path
 - `IOS_APP_SCHEME` - Xcode build scheme
 - `IOS_APP_ARTIFACT` - App bundle path/glob
@@ -340,7 +577,7 @@ Configuration for both Android and iOS plugins is now managed via environment va
 ### Android SDK via Nix Flake
 - The Android SDK is composed via Nix flake at `devbox.d/android/flake.nix`
 - Flake outputs: `android-sdk`, `android-sdk-full`, `android-sdk-preview`
-- SDK evaluation is cached in `.nix_sdk_eval.cache` (1-hour TTL)
+- Nix handles flake evaluation caching internally (fast after first evaluation)
 - Lock file limits which API versions are evaluated (optimization for CI)
 
 ### iOS Xcode Discovery

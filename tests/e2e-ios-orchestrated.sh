@@ -4,14 +4,47 @@ set -euo pipefail
 # Orchestrated E2E test for iOS using process-compose
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-EXAMPLE_DIR="$SCRIPT_DIR/../examples/ios"
+REPO_ROOT="$SCRIPT_DIR/.."
 
 echo "========================================="
 echo "E2E Test: iOS (Orchestrated)"
 echo "========================================="
 echo ""
 
-cd "$EXAMPLE_DIR"
+cd "$REPO_ROOT"
+
+# Track test exit status
+TEST_EXIT_STATUS=0
+
+# Cleanup function to kill all child processes
+cleanup() {
+  local exit_code=$?
+  # Use saved exit status if available, otherwise use the exit code from the trap
+  if [ "$TEST_EXIT_STATUS" -ne 0 ]; then
+    exit_code=$TEST_EXIT_STATUS
+  fi
+
+  echo ""
+  echo "🧹 Cleaning up processes..."
+
+  # Kill all process-compose instances
+  pkill -P $$ process-compose 2>/dev/null || true
+  pkill -9 process-compose 2>/dev/null || true
+
+  # Kill any simulators started by this script
+  pkill -P $$ Simulator 2>/dev/null || true
+
+  # Shutdown all simulators
+  xcrun simctl shutdown all 2>/dev/null || true
+
+  echo "✓ Cleanup complete"
+
+  # Exit with the correct status
+  exit $exit_code
+}
+
+# Set trap to cleanup on exit, interrupt, or termination
+trap cleanup EXIT INT TERM
 
 # Ensure we have process-compose
 if ! command -v process-compose &> /dev/null; then
@@ -39,13 +72,16 @@ TUI_MODE="${TEST_TUI:-false}"
 if process-compose -f "$SCRIPT_DIR/process-compose-ios.yaml" \
     --tui="$TUI_MODE" \
     --ordered-shutdown \
-    --keep-tui; then
+    --no-server --keep-project; then
     echo ""
     echo "✓ iOS orchestrated E2E test passed!"
-    exit 0
+    TEST_EXIT_STATUS=0
 else
     echo ""
     echo "✗ iOS orchestrated E2E test failed!"
-    echo "Check logs at: /tmp/ios-e2e-logs"
-    exit 1
+    echo "Check logs at: test-results/ios-repo-e2e-logs"
+    TEST_EXIT_STATUS=1
 fi
+
+# Don't exit here - let the trap handle it with cleanup
+exit $TEST_EXIT_STATUS

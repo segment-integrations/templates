@@ -161,7 +161,7 @@ You can selectively run tests by toggling the inputs:
 Device configurations are stored in each example's `devbox.d/` directory:
 
 ```
-devbox/examples/
+examples/
 ├── android/devbox.d/android/devices/
 │   ├── min.json  (API 21)
 │   └── max.json  (API 36)
@@ -288,7 +288,7 @@ Check your repository's cache usage:
 
 To add new test scenarios:
 
-1. Update the test scripts in `devbox/plugins/tests/`
+1. Update the test scripts in `plugins/tests/`
 2. Add new jobs to `pr-checks.yml` for fast validation
 3. Add new matrix entries to `e2e-full.yml` for platform coverage
 4. Update this README with the new test coverage
