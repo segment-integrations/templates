@@ -106,3 +106,15 @@ processes:
         condition: process_completed
     availability:
       restart: "no"
+
+  # Summary - displays results and optionally stays open
+  summary:
+    command: "bash tests/test-summary.sh 'Android E2E Test Suite' 'test-results/android-e2e-logs'"
+    depends_on:
+      cleanup:
+        condition: process_completed
+    availability:
+      restart: "no"
+    shutdown:
+      signal: 15
+      timeout_seconds: 1

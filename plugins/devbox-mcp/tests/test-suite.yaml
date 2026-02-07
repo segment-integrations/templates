@@ -1,0 +1,45 @@
+version: "0.5"
+
+log_location: "test-results/devbox-mcp-logs"
+log_level: info
+
+processes:
+  # Test server structure and configuration
+  test-server:
+    command: "bash plugins/devbox-mcp/tests/test-server.sh"
+    availability:
+      restart: "no"
+
+  # Test tool definitions and handlers
+  test-tools:
+    command: "bash plugins/devbox-mcp/tests/test-tools.sh"
+    depends_on:
+      test-server:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"
+
+  # Test MCP tools functionality
+  test-mcp-tools:
+    command: "node plugins/devbox-mcp/tests/test-mcp-tools.js"
+    depends_on:
+      test-tools:
+        condition: process_completed_successfully
+    availability:
+      restart: "no"
+
+  # Summary process - stays open to keep TUI visible in interactive mode
+  summary:
+    command: "bash tests/test-summary.sh 'Devbox MCP Test Suite' 'test-results/devbox-mcp-logs'"
+    depends_on:
+      test-server:
+        condition: process_completed
+      test-tools:
+        condition: process_completed
+      test-mcp-tools:
+        condition: process_completed
+    availability:
+      restart: "no"
+    shutdown:
+      signal: 15
+      timeout_seconds: 1

@@ -1,0 +1,10 @@
+version: "0.5"
+
+processes:
+  mcp-server:
+    command: "node src/index.js"
+    availability:
+      restart: "on_failure"
+    shutdown:
+      signal: 15
+      timeout: 30

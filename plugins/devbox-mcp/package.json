@@ -1,11 +1,11 @@
 {
-  "name": "devbox-mcp-server",
+  "name": "devbox-mcp",
   "version": "0.1.0",
   "description": "Model Context Protocol server for Jetify's devbox development environment tool",
   "type": "module",
   "main": "src/index.js",
   "bin": {
-    "devbox-mcp-server": "src/index.js"
+    "devbox-mcp": "src/index.js"
   },
   "keywords": [
     "mcp",

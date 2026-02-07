@@ -86,6 +86,37 @@ devbox run test:e2e:ios       # iOS E2E only
 devbox run test:e2e:rn        # React Native E2E only
 ```
 
+## Shared Test Utilities
+
+### test-summary.sh - DRY Summary Pattern
+
+All process-compose test suites use a shared summary script that displays results and optionally keeps the TUI open.
+
+**Usage in test-suite.yaml:**
+```yaml
+processes:
+  summary:
+    command: "bash tests/test-summary.sh 'Your Test Suite Name' 'path/to/logs'"
+    depends_on:
+      your-test:
+        condition: process_completed
+    availability:
+      restart: "no"
+    shutdown:
+      signal: 15
+      timeout_seconds: 1
+```
+
+**Behavior:**
+- `TEST_TUI=false` (default): Shows summary and exits immediately (for CI/scripts)
+- `TEST_TUI=true`: Shows summary with "Press Ctrl+C to exit" and sleeps indefinitely (for interactive debugging)
+
+**Note:** Use `process_completed` (not `process_completed_successfully`) so summary runs even when tests fail.
+
+### test-framework.sh
+
+Shared assertion helpers for bash tests (see `test-framework.sh` for full API).
+
 ## Test Architecture
 
 All tests are orchestrated using [process-compose](https://github.com/F1bonacc1/process-compose), providing:

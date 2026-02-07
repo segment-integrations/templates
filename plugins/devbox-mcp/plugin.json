@@ -1,0 +1,33 @@
+{
+  "name": "devbox-mcp",
+  "version": "0.1.0",
+  "description": "Model Context Protocol server for Jetify's devbox development environment tool",
+  "env": {
+    "MCP_SERVER_PORT": "3000"
+  },
+  "packages": {
+    "nodejs": "latest",
+    "process-compose": "latest"
+  },
+  "create_files": {
+    "{{ .Virtenv }}/process-compose.yaml": "config/process-compose.yaml"
+  },
+  "shell": {
+    "init_hook": [
+      "echo 'Devbox MCP Server'",
+      "echo 'Start service: devbox services start mcp-server'",
+      "echo 'Test directly: node src/index.js'"
+    ],
+    "scripts": {
+      "mcp:start": [
+        "process-compose -f {{ .Virtenv }}/process-compose.yaml up mcp-server"
+      ],
+      "mcp:stop": [
+        "process-compose -f {{ .Virtenv }}/process-compose.yaml down"
+      ],
+      "mcp:status": [
+        "process-compose -f {{ .Virtenv }}/process-compose.yaml process list"
+      ]
+    }
+  }
+}
